@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -28,19 +30,39 @@ var (
 	TrashDirectoryName      = []byte{0x54, 0x52, 0x41, 0x53, 0x48, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20} // TRASH
 )
 
-type Sector struct {
-	Data    [0x200]byte
-	Cluster uint32
+func EmptyName() []byte {
+	b := make([]byte, 11)
+	for i := 0; i < 11; i++ {
+		b[i] = 0x20
+	}
+	return b
 }
 
-func NewSector() *Sector {
-	return &Sector{}
+func ToImpdosName(filePath string, isDirectory bool) []byte {
+	name := EmptyName()
+	filePath = strings.ToUpper(filePath)
+	filePath = strings.ReplaceAll(filePath, "_", "")
+	filePath = strings.ReplaceAll(filePath, " ", "")
+	filePath = strings.ReplaceAll(filePath, "-", "")
+	if isDirectory {
+		v := path.Base(filePath)
+		l := 11
+		if len(v) < 11 {
+			l = len(v)
+		}
+		copy(name, v[0:l])
+	} else {
+		v := path.Base(filePath)
+		e := path.Ext(v)
+		vv := strings.Replace(v, e, "", -1)
+		copy(name[8:], e[1:])
+		copy(name[0:], vv[:8])
+	}
+
+	return name
 }
 
 type Partition struct {
-	Sector0         *Sector
-	Sector1         *Sector
-	Sectors         []*Sector
 	Inodes          []*Inode
 	PartitionNumber int
 }
@@ -62,14 +84,18 @@ func (imp *Impdos) ReadRootCatalogue(partitionNumber int) error {
 	return imp.Partitions[partitionNumber].ReadRootCatalogue(imp.Pointer)
 }
 
+func (p *Partition) PartitionOffset() int64 {
+	return (0x8000000 * int64(p.PartitionNumber))
+}
+
 func (p *Partition) ReadRootCatalogue(f *os.File) error {
-	var partitionOffset int64 = (0x8000000 * int64(p.PartitionNumber))
-	var offset int64 = partitionOffset + 0x40200
+
+	var offset int64 = p.PartitionOffset() + 0x40200
 	_, err := f.Seek(offset, io.SeekStart)
 	if err != nil {
 		return err
 	}
-	inode := NewInode(partitionOffset)
+	inode := NewInode(p.PartitionOffset())
 	if err := inode.ReadCatalogue(f); err != nil {
 		return err
 	}
@@ -89,6 +115,24 @@ func (i *Inode) ListCatalogue(space string) string {
 		}
 	}
 	return c
+}
+
+func (i *Inode) GetHighestN() uint16 {
+	var n uint16
+
+	for _, v := range i.Inodes {
+		if v.Cluster > n {
+			n = v.Cluster
+		}
+		if v.IsDir() {
+			vv := v.GetHighestN()
+			if vv > n {
+				n = vv
+			}
+		}
+	}
+
+	return n
 }
 
 func (p *Partition) ListCatalogue() string {
@@ -150,11 +194,57 @@ func (imp *Impdos) ReadAutoExec() (*AutoExec, error) {
 	return a, nil
 }
 
+func (p *Partition) GetNextN(f *os.File) (uint16, error) {
+	n, err := p.GetLastN(f)
+	if err != nil {
+		return n, err
+	}
+	offset, err := f.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return n, err
+	}
+	partitionOffset := p.PartitionOffset()
+	_, err = f.Seek(partitionOffset+0x203, io.SeekStart)
+	if err != nil {
+		return n, err
+	}
+	b := make([]byte, 4)
+	if err := binary.Read(f, binary.LittleEndian, &b); err != nil {
+		return n, err
+	}
+	size := binary.LittleEndian.Uint32(b)
+	diff := size / 0x200
+	_, err = f.Seek(offset, io.SeekStart)
+	if err != nil {
+		return n, err
+	}
+	return n + uint16(diff) + 1, nil
+}
+
+func (p *Partition) GetLastN(f *os.File) (uint16, error) {
+	partitionOffset := p.PartitionOffset()
+	sector1 := partitionOffset + 0x201
+	var cluster uint16
+	offset, err := f.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return cluster, err
+	}
+	_, err = f.Seek(sector1, io.SeekStart)
+	if err != nil {
+		return cluster, err
+	}
+	if err := binary.Read(f, binary.LittleEndian, &cluster); err != nil {
+		return cluster, err
+	}
+	_, err = f.Seek(offset, io.SeekStart)
+	if err != nil {
+		return cluster, err
+	}
+	return cluster, nil
+}
+
 func NewPartition(number int) *Partition {
 	return &Partition{
-		Sector0:         NewSector(),
-		Sector1:         NewSector(),
-		Sectors:         make([]*Sector, 0),
 		Inodes:          make([]*Inode, 0),
 		PartitionNumber: number,
 	}
