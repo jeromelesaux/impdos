@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
+	"unicode/utf8"
 )
 
 var (
@@ -56,16 +58,18 @@ func NewImpdos() *Impdos {
 	}
 }
 
-func (imp *Impdos) ReadRootCatalogue() error {
-	_, err := imp.Pointer.Seek(0x40200, io.SeekStart)
-	if err != nil {
-		return err
-	}
-	return imp.Partitions[0].ReadRootCatalogue(imp.Pointer)
+func (imp *Impdos) ReadRootCatalogue(partitionNumber int) error {
+	return imp.Partitions[partitionNumber].ReadRootCatalogue(imp.Pointer)
 }
 
 func (p *Partition) ReadRootCatalogue(f *os.File) error {
-	inode := NewInode()
+	var partitionOffset int64 = (0x8000000 * int64(p.PartitionNumber))
+	var offset int64 = partitionOffset + 0x40200
+	_, err := f.Seek(offset, io.SeekStart)
+	if err != nil {
+		return err
+	}
+	inode := NewInode(partitionOffset)
 	if err := inode.ReadCatalogue(f); err != nil {
 		return err
 	}
@@ -198,7 +202,7 @@ func (i *Inode) Get(f *os.File) ([]byte, error) {
 	if err != nil {
 		return b, err
 	}
-	nextCatalogueOffset := ClusterOffset(i.Cluster)
+	nextCatalogueOffset := ClusterOffset(i.Cluster) + int(i.PartitionOffset)
 
 	/*	fmt.Printf("Name:%s Offset :%x next catalogue offset :%x\n",
 		string(inode.Name),
@@ -225,12 +229,13 @@ func (i *Inode) Get(f *os.File) ([]byte, error) {
 }
 
 type Inode struct {
-	Name    []byte
-	Type    byte   // 0 is a file #10 is a directory
-	Unused  []byte // constant
-	Cluster uint16 // cluster number
-	Size    uint32
-	Inodes  []*Inode // files in the directory
+	Name            []byte
+	Type            byte   // 0 is a file #10 is a directory
+	Unused          []byte // constant
+	Cluster         uint16 // cluster number
+	Size            uint32
+	Inodes          []*Inode // files in the directory
+	PartitionOffset int64
 }
 
 func (i *Inode) Read(f *os.File) error {
@@ -255,9 +260,22 @@ func (i *Inode) Read(f *os.File) error {
 	return nil
 }
 
+func isPrint(v []byte) bool {
+	for _, c := range v {
+		b := make([]byte, 1)
+		b[0] = c
+		r, _ := utf8.DecodeRune(b)
+		if !strconv.IsPrint(r) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (i *Inode) ReadCatalogue(f *os.File) error {
 	for {
-		inode := NewInode()
+		inode := NewInode(i.PartitionOffset)
 		if err := inode.Read(f); err != nil {
 			return err
 		}
@@ -265,26 +283,28 @@ func (i *Inode) ReadCatalogue(f *os.File) error {
 			break
 		}
 		if inode.Type == DirectoryType && inode.Name[0] != '.' && inode.Name[1] != '.' {
-			offset, err := f.Seek(0, io.SeekCurrent)
-			if err != nil {
-				return err
-			}
-			nextCatalogueOffset := ClusterOffset(inode.Cluster)
+			if isPrint(inode.Name) {
+				offset, err := f.Seek(0, io.SeekCurrent)
+				if err != nil {
+					return err
+				}
+				nextCatalogueOffset := ClusterOffset(inode.Cluster) + int(inode.PartitionOffset)
 
-			/*	fmt.Printf("Name:%s Offset :%x next catalogue offset :%x\n",
-				string(inode.Name),
-				offset,
-				nextCatalogueOffset)*/
-			_, err = f.Seek(int64(nextCatalogueOffset), io.SeekStart)
-			if err != nil {
-				return err
-			}
-			if err = inode.ReadCatalogue(f); err != nil {
-				return err
-			}
-			_, err = f.Seek(int64(offset), io.SeekStart) // return to initial offset
-			if err != nil {
-				return err
+				fmt.Printf("Name:%s Offset :%x next catalogue offset :%x\n",
+					string(inode.Name),
+					offset,
+					nextCatalogueOffset)
+				_, err = f.Seek(int64(nextCatalogueOffset), io.SeekStart)
+				if err != nil {
+					return err
+				}
+				if err = inode.ReadCatalogue(f); err != nil {
+					return err
+				}
+				_, err = f.Seek(int64(offset), io.SeekStart) // return to initial offset
+				if err != nil {
+					return err
+				}
 			}
 		}
 		i.Inodes = append(i.Inodes, inode)
@@ -296,11 +316,12 @@ func (i *Inode) IsEnd() bool {
 	return i.Type == EndOfCatalogueType
 }
 
-func NewInode() *Inode {
+func NewInode(partitionOffset int64) *Inode {
 	return &Inode{
-		Name:   make([]byte, 11),
-		Unused: make([]byte, 14),
-		Inodes: make([]*Inode, 0),
+		Name:            make([]byte, 11),
+		Unused:          make([]byte, 14),
+		Inodes:          make([]*Inode, 0),
+		PartitionOffset: partitionOffset,
 	}
 }
 
