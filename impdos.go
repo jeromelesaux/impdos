@@ -575,6 +575,53 @@ func (i *Inode) findInode(name []byte) *Inode {
 	return nil
 }
 
+func (p *Partition) DeleteInode(inodeToDelete *Inode, folder *Inode, fp *os.File) error {
+	inodeToDelete.Delete()
+	offset, err := fp.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return err
+	}
+
+	catalogueOffset := ClusterOffset(folder.Cluster) + int(folder.PartitionOffset)
+	_, err = fp.Seek(int64(catalogueOffset), io.SeekStart)
+	if err != nil {
+		return err
+	}
+
+	// loop to find a new empty entry
+	for {
+		inode := NewInode(folder.PartitionOffset)
+		if err := inode.Read(fp); err != nil {
+			return err
+		}
+		if inode.Cluster == inodeToDelete.Cluster && inode.Size == inodeToDelete.Size {
+			break
+		}
+	}
+
+	// go to the start of the inode entry position in dom
+	_, err = fp.Seek(-32, io.SeekCurrent)
+	if err != nil {
+		return err
+	}
+	// apply on dom the deleted inode
+	if err := inodeToDelete.Save(fp); err != nil {
+		return err
+	}
+
+	_, err = fp.Seek(int64(offset), io.SeekStart) // return to initial offset
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (i *Inode) Delete() error {
+	i.Name[0] = 0xE5
+	return nil
+}
+
 func (p *Partition) NewFolder(folderName string, fp *os.File, folder *Inode) error {
 	// transform file name
 	impdosName := ToImpdosName(folderName, true)
