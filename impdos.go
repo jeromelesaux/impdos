@@ -236,9 +236,6 @@ func (p *Partition) SaveN(f *os.File, cluster uint16, size uint32) error {
 }
 
 func (p *Partition) SaveInode(fp *os.File, folder *Inode, newInode *Inode) error {
-	if folder.Type != DirectoryType {
-		return errors.New("bad inode type expected directory")
-	}
 	offset, err := fp.Seek(0, io.SeekCurrent)
 	if err != nil {
 		return err
@@ -568,6 +565,87 @@ func (in *Inode) IsDir() bool {
 }
 
 // secteur du catalgoue root toujours en secteur 201 soit offset 0x200*0x201 (512*513) 262656
+
+func (i *Inode) findInode(name []byte) *Inode {
+	for _, v := range i.Inodes {
+		if string(v.Name) == string(name) {
+			return v
+		}
+	}
+	return nil
+}
+
+func (p *Partition) NewFolder(folderName string, fp *os.File, folder *Inode) error {
+	// transform file name
+	impdosName := ToImpdosName(folderName, true)
+	// get next cluster
+	nextCluster, err := p.GetNextN(fp)
+	if err != nil {
+		return err
+	}
+
+	// add new inode
+	newInode := InitInode(p.PartitionOffset(), nextCluster, 0, DirectoryType, impdosName)
+
+	// insert new inode in catalogue
+	folder.Inodes = append(folder.Inodes, newInode)
+	if len(folder.Inodes) > 64 && p.PartitionNumber != 0 {
+		return errors.New("catalogue exceed 64 entries")
+	}
+
+	// save on disk
+	if err := p.SaveInode(fp, folder, newInode); err != nil {
+		return err
+	}
+	// save last file cluster and size file in sector 1
+	if err := p.SaveN(fp, nextCluster, 0); err != nil {
+		return err
+	}
+	// get next cluster
+	nextCluster, err = p.GetNextN(fp)
+	if err != nil {
+		return err
+	}
+
+	// now create the trash folder for the new folder
+	// add Trash folder into newInode
+	trashName := ToImpdosName("TRASH", true)
+	originalTrash := folder.findInode([]byte("TRASH"))
+	if originalTrash == nil {
+		return errors.New("folder does not contain any trash folder")
+	}
+	trashInode := InitInode(p.PartitionOffset(), originalTrash.Cluster, 0, DirectoryType, trashName)
+
+	// save on disk
+	if err := p.SaveInode(fp, newInode, trashInode); err != nil {
+		return err
+	}
+	// save last file cluster and size file in sector 1
+	if err := p.SaveN(fp, nextCluster, 0); err != nil {
+		return err
+	}
+
+	// get next cluster
+	nextCluster, err = p.GetNextN(fp)
+	if err != nil {
+		return err
+	}
+
+	// now upper inode
+	upperFolder := ToImpdosName("..", true)
+	upperInode := InitInode(p.PartitionOffset(), folder.Cluster, 0, DirectoryType, upperFolder)
+
+	// save on disk
+	if err := p.SaveInode(fp, newInode, upperInode); err != nil {
+		return err
+	}
+	// save last file cluster and size file in sector 1
+	if err := p.SaveN(fp, nextCluster, 0); err != nil {
+		return err
+	}
+
+	return nil
+}
 
 func (p *Partition) Save(filename string, fp *os.File, folder *Inode) error {
 	// transform file name
