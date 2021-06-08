@@ -77,3 +77,27 @@ func TestReplaceName(t *testing.T) {
 	fmt.Printf("[%s]\n", v)
 
 }
+
+func TestCopyFileInDom(t *testing.T) {
+	device := "/Users/jeromelesaux/Downloads/impdos_copy_dump.img"
+	imp, err := Read(device)
+	if err != nil {
+		t.Fatalf("%v\n", err)
+	}
+
+	ok, err := imp.Check()
+	if err != nil {
+		t.Fatalf("%v\n", err)
+	}
+	if !ok {
+		t.Fatalf("Expected ok and it is not.")
+	}
+	if err := imp.ReadCatalogues(); err != nil {
+		t.Fatal(err)
+	}
+
+	rootFolder := imp.Partitions[0].Inodes[0]
+	if err := imp.Partitions[0].Save("/Users/jeromelesaux/Documents/Projets/go/src/github.com/jeromelesaux/impdos/ironman.scr", imp.Pointer, rootFolder); err != nil {
+		t.Fatal(err)
+	}
+}

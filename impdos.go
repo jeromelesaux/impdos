@@ -56,8 +56,12 @@ func ToImpdosName(filePath string, isDirectory bool) []byte {
 		v := path.Base(filePath)
 		e := path.Ext(v)
 		vv := strings.Replace(v, e, "", -1)
+		l := 8
+		if len(vv) < 8 {
+			l = len(vv)
+		}
 		copy(name[8:], e[1:])
-		copy(name[0:], vv[:8])
+		copy(name[0:], vv[:l])
 	}
 
 	return name
@@ -79,6 +83,16 @@ func NewImpdos() *Impdos {
 		CheckTag:   make([]byte, 6),
 		Partitions: make([]*Partition, 0),
 	}
+}
+
+func (imp *Impdos) ReadCatalogues() error {
+	for i := 0; i < len(imp.Partitions); i++ {
+		err := imp.ReadRootCatalogue(i)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (imp *Impdos) ReadRootCatalogue(partitionNumber int) error {
@@ -320,7 +334,7 @@ func NewPartition(number int) *Partition {
 func Read(device string) (*Impdos, error) {
 	var err error
 	imp := NewImpdos()
-	imp.Pointer, err = os.OpenFile(device, os.O_APPEND, os.ModePerm)
+	imp.Pointer, err = os.OpenFile(device, os.O_RDWR, os.ModePerm)
 	if err != nil {
 		return imp, err
 	}
@@ -539,6 +553,16 @@ func NewInode(partitionOffset int64) *Inode {
 	}
 }
 
+func InitInode(partitionOffset int64, cluster uint16, size uint32, inodeType byte, name []byte) *Inode {
+	inode := NewInode(partitionOffset)
+	inode.Cluster = cluster
+	inode.Size = size
+	inode.Type = inodeType
+	copy(inode.Name, name)
+	copy(inode.Unused, UnusedConstant0)
+	return inode
+}
+
 func (in *Inode) IsDir() bool {
 	return in.Type == DirectoryType
 }
@@ -566,11 +590,8 @@ func (p *Partition) Save(filename string, fp *os.File, folder *Inode) error {
 	}
 
 	// add new inode
-	newInode := NewInode(p.PartitionOffset())
-	copy(newInode.Name, impdosName)
-	newInode.Size = uint32(len(b))
-	newInode.Cluster = nextCluster
-	newInode.Type = FileType
+	newInode := InitInode(p.PartitionOffset(), nextCluster, uint32(len(b)), FileType, impdosName)
+
 	// insert new inode in catalogue
 	folder.Inodes = append(folder.Inodes, newInode)
 	if len(folder.Inodes) > 64 && p.PartitionNumber != 0 {
