@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path"
 	"strconv"
@@ -194,6 +195,72 @@ func (imp *Impdos) ReadAutoExec() (*AutoExec, error) {
 	return a, nil
 }
 
+func (p *Partition) SaveN(f *os.File, cluster uint16, size uint32) error {
+	partitionOffset := p.PartitionOffset()
+	sector1 := partitionOffset + 0x201
+
+	offset, err := f.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return err
+	}
+	_, err = f.Seek(sector1, io.SeekStart)
+	if err != nil {
+		return err
+	}
+
+	if err := binary.Write(f, binary.LittleEndian, &cluster); err != nil {
+		return err
+	}
+	if err := binary.Write(f, binary.LittleEndian, &size); err != nil {
+		return err
+	}
+	_, err = f.Seek(offset, io.SeekStart)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *Partition) SaveInode(fp *os.File, folder *Inode, newInode *Inode) error {
+	if folder.Type != DirectoryType {
+		return errors.New("bad inode type expected directory")
+	}
+	offset, err := fp.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return err
+	}
+
+	catalogueOffset := ClusterOffset(folder.Cluster) + int(folder.PartitionOffset)
+	_, err = fp.Seek(int64(catalogueOffset), io.SeekStart)
+	if err != nil {
+		return err
+	}
+	// loop to find a new empty entry
+	for {
+		inode := NewInode(folder.PartitionOffset)
+		if err := inode.Read(fp); err != nil {
+			return err
+		}
+		if inode.IsEnd() {
+			break
+		}
+	}
+
+	// go to the start of the inode entry position in dom
+	_, err = fp.Seek(-32, io.SeekCurrent)
+	if err != nil {
+		return err
+	}
+	if err := newInode.Save(fp); err != nil {
+		return err
+	}
+	_, err = fp.Seek(int64(offset), io.SeekStart) // return to initial offset
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (p *Partition) GetNextN(f *os.File) (uint16, error) {
 	n, err := p.GetLastN(f)
 	if err != nil {
@@ -253,7 +320,7 @@ func NewPartition(number int) *Partition {
 func Read(device string) (*Impdos, error) {
 	var err error
 	imp := NewImpdos()
-	imp.Pointer, err = os.Open(device)
+	imp.Pointer, err = os.OpenFile(device, os.O_APPEND, os.ModePerm)
 	if err != nil {
 		return imp, err
 	}
@@ -318,6 +385,42 @@ func (i *Inode) Get(f *os.File) ([]byte, error) {
 	return b, nil
 }
 
+func (i *Inode) Put(f *os.File, data []byte) error {
+
+	if i.IsDir() {
+		return errors.New("inode is directory can not be get")
+	}
+
+	offset, err := f.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return err
+	}
+	nextCatalogueOffset := ClusterOffset(i.Cluster) + int(i.PartitionOffset)
+
+	/*	fmt.Printf("Name:%s Offset :%x next catalogue offset :%x\n",
+		string(inode.Name),
+		offset,
+		nextCatalogueOffset)*/
+	_, err = f.Seek(int64(nextCatalogueOffset), io.SeekStart)
+	if err != nil {
+		return err
+	}
+
+	read, err := f.Write(data)
+	if err != nil {
+		return err
+	}
+	if read != len(data) {
+		return errors.New("read bytes differs from size inode")
+	}
+
+	_, err = f.Seek(int64(offset), io.SeekStart) // return to initial offset
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 type Inode struct {
 	Name            []byte
 	Type            byte   // 0 is a file #10 is a directory
@@ -326,6 +429,27 @@ type Inode struct {
 	Size            uint32
 	Inodes          []*Inode // files in the directory
 	PartitionOffset int64
+}
+
+func (i *Inode) Save(f *os.File) error {
+	if err := binary.Write(f, binary.BigEndian, i.Name); err != nil {
+		return err
+	}
+	if err := binary.Write(f, binary.BigEndian, &i.Type); err != nil {
+		return err
+	}
+	if err := binary.Write(f, binary.BigEndian, i.Unused); err != nil {
+		return err
+	}
+	if err := binary.Write(f, binary.LittleEndian, &i.Cluster); err != nil {
+		return err
+	}
+	size := make([]byte, 4)
+	binary.LittleEndian.PutUint32(size, i.Size)
+	if err := binary.Write(f, binary.LittleEndian, size); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (i *Inode) Read(f *os.File) error {
@@ -420,3 +544,52 @@ func (in *Inode) IsDir() bool {
 }
 
 // secteur du catalgoue root toujours en secteur 201 soit offset 0x200*0x201 (512*513) 262656
+
+func (p *Partition) Save(filename string, fp *os.File, folder *Inode) error {
+	// transform file name
+	impdosName := ToImpdosName(filename, false)
+
+	// read local file content
+	f, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	b, err := ioutil.ReadAll(f)
+	if err != nil {
+		return err
+	}
+
+	// get next cluster
+	nextCluster, err := p.GetNextN(fp)
+	if err != nil {
+		return err
+	}
+
+	// add new inode
+	newInode := NewInode(p.PartitionOffset())
+	copy(newInode.Name, impdosName)
+	newInode.Size = uint32(len(b))
+	newInode.Cluster = nextCluster
+	newInode.Type = FileType
+	// insert new inode in catalogue
+	folder.Inodes = append(folder.Inodes, newInode)
+	if len(folder.Inodes) > 64 && p.PartitionNumber != 0 {
+		return errors.New("catalogue exceed 64 entries")
+	}
+
+	// save on disk
+	if err := p.SaveInode(fp, folder, newInode); err != nil {
+		return err
+	}
+	// copy file content in new sector
+	if err := newInode.Put(fp, b); err != nil {
+		return err
+	}
+
+	// save last file cluster and size file in sector 1
+	if err := p.SaveN(fp, nextCluster, uint32(len(b))); err != nil {
+		return err
+	}
+
+	return nil
+}
