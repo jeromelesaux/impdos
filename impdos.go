@@ -68,7 +68,7 @@ func ToImpdosName(filePath string, isDirectory bool) []byte {
 }
 
 type Partition struct {
-	Inodes          []*Inode
+	Inode           *Inode
 	PartitionNumber int
 }
 
@@ -114,17 +114,19 @@ func (p *Partition) ReadRootCatalogue(f *os.File) error {
 	if err := inode.ReadCatalogue(f); err != nil {
 		return err
 	}
-	p.Inodes = append(p.Inodes, inode.Inodes...)
+	p.Inode = InitInode(p.PartitionOffset(), 0, 0, DirectoryType, []byte{})
+	p.Inode.Inodes = append(p.Inode.Inodes, inode.Inodes...)
 
 	return nil
 }
 func (i *Inode) ListCatalogue(space string) string {
 	var c string
+	c += fmt.Sprintf("%s[%.8s]\n", space, string(i.Name))
 	for _, v := range i.Inodes {
 
 		if v.IsDir() {
-			c += fmt.Sprintf("%s[%.8s]\n", space, string(v.Name))
-			c += v.ListCatalogue(space + "\t")
+			//c += fmt.Sprintf("%s[%.8s]\n", space, string(v.Name))
+			c += v.ListCatalogue(space + "-")
 		} else {
 			c += fmt.Sprintf("%s%.8s %.4d Ko\n", space, string(v.Name), v.Size/1000)
 		}
@@ -152,14 +154,15 @@ func (i *Inode) GetHighestN() uint16 {
 
 func (p *Partition) ListCatalogue() string {
 	var c string
-	for _, v := range p.Inodes {
+	c += p.Inode.ListCatalogue("")
+	/*for _, v := range p.Inode.Inodes {
 		if v.IsDir() {
 			c += fmt.Sprintf("[%.8s]\n", string(v.Name))
 			c += v.ListCatalogue("\t")
 		} else {
 			c += fmt.Sprintf("%.8s %.4d Ko\n", string(v.Name), v.Size/1000)
 		}
-	}
+	}*/
 	return c
 }
 
@@ -322,10 +325,11 @@ func (p *Partition) GetLastN(f *os.File) (uint16, error) {
 }
 
 func NewPartition(number int) *Partition {
-	return &Partition{
-		Inodes:          make([]*Inode, 0),
+	p := &Partition{
 		PartitionNumber: number,
 	}
+	p.Inode = NewInode(p.PartitionOffset())
+	return p
 }
 
 func Read(device string) (*Impdos, error) {

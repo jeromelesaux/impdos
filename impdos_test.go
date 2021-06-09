@@ -57,10 +57,11 @@ func TestLoadPartition1(t *testing.T) {
 		t.Fatalf("%v\n", err)
 	}
 	t.Logf("%s\n", a.String())
-	if err := imp.ReadRootCatalogue(1); err != nil {
+	if err := imp.ReadCatalogues(); err != nil {
 		t.Fatalf("%v\n", err)
 	}
 	fmt.Printf("%s\n", imp.Partitions[1].ListCatalogue())
+	fmt.Printf("%s\n", imp.Partitions[2].ListCatalogue())
 	maxCluster, err := imp.Partitions[0].GetNextN(imp.Pointer)
 	if err != nil {
 		t.Fatalf("%v\n", err)
@@ -96,7 +97,7 @@ func TestCopyFileInDom(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rootFolder := imp.Partitions[0].Inodes[0]
+	rootFolder := imp.Partitions[0].Inode
 	if err := imp.Partitions[0].Save("/Users/jeromelesaux/Documents/Projets/go/src/github.com/jeromelesaux/impdos/ironman.scr", imp.Pointer, rootFolder); err != nil {
 		t.Fatal(err)
 	}
