@@ -571,8 +571,10 @@ func (in *Inode) IsDir() bool {
 // secteur du catalgoue root toujours en secteur 201 soit offset 0x200*0x201 (512*513) 262656
 
 func (i *Inode) findInode(name []byte) *Inode {
+	toSearch := strings.Trim(string(name), " ")
 	for _, v := range i.Inodes {
-		if string(v.Name) == string(name) {
+		v1 := strings.Trim(string(v.Name), " ")
+		if v1 == toSearch {
 			return v
 		}
 	}
