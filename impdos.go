@@ -111,10 +111,12 @@ func (p *Partition) ReadRootCatalogue(f *os.File) error {
 		return err
 	}
 	inode := NewInode(p.PartitionOffset())
+	inode.IsRoot = true
 	if err := inode.ReadCatalogue(f); err != nil {
 		return err
 	}
-	p.Inode = InitInode(p.PartitionOffset(), 0, 0, DirectoryType, []byte{})
+	p.Inode = InitInode(p.PartitionOffset(), 2, 0, DirectoryType, []byte{})
+	p.Inode.IsRoot = true
 	p.Inode.Inodes = append(p.Inode.Inodes, inode.Inodes...)
 
 	return nil
@@ -244,7 +246,7 @@ func (p *Partition) SaveInode(fp *os.File, folder *Inode, newInode *Inode) error
 		return err
 	}
 
-	catalogueOffset := ClusterOffset(folder.Cluster) + int(folder.PartitionOffset)
+	catalogueOffset := folder.ClusterOffset()
 	_, err = fp.Seek(int64(catalogueOffset), io.SeekStart)
 	if err != nil {
 		return err
@@ -321,6 +323,9 @@ func (p *Partition) GetLastN(f *os.File) (uint16, error) {
 	if err != nil {
 		return cluster, err
 	}
+	if cluster == 0 {
+		cluster = 2
+	}
 	return cluster, nil
 }
 
@@ -358,8 +363,12 @@ func Read(device string) (*Impdos, error) {
 	return imp, err
 }
 
-func ClusterOffset(n uint16) int {
-	return (((int(n) - 2) * 4) + 0x221) * 0x200
+func (i *Inode) ClusterOffset() int {
+	if i.IsRoot {
+		return 0x40200 + int(i.PartitionOffset)
+	} else {
+		return (((int(i.Cluster)-2)*4)+0x221)*0x200 + int(i.PartitionOffset)
+	}
 }
 
 func (i *Inode) Get(f *os.File) ([]byte, error) {
@@ -374,7 +383,7 @@ func (i *Inode) Get(f *os.File) ([]byte, error) {
 	if err != nil {
 		return b, err
 	}
-	nextCatalogueOffset := ClusterOffset(i.Cluster) + int(i.PartitionOffset)
+	nextCatalogueOffset := i.ClusterOffset()
 
 	/*	fmt.Printf("Name:%s Offset :%x next catalogue offset :%x\n",
 		string(inode.Name),
@@ -410,7 +419,7 @@ func (i *Inode) Put(f *os.File, data []byte) error {
 	if err != nil {
 		return err
 	}
-	nextCatalogueOffset := ClusterOffset(i.Cluster) + int(i.PartitionOffset)
+	nextCatalogueOffset := i.ClusterOffset()
 
 	/*	fmt.Printf("Name:%s Offset :%x next catalogue offset :%x\n",
 		string(inode.Name),
@@ -444,6 +453,7 @@ type Inode struct {
 	Size            uint32
 	Inodes          []*Inode // files in the directory
 	PartitionOffset int64
+	IsRoot          bool
 }
 
 func (i *Inode) Save(f *os.File) error {
@@ -517,7 +527,7 @@ func (i *Inode) ReadCatalogue(f *os.File) error {
 				if err != nil {
 					return err
 				}
-				nextCatalogueOffset := ClusterOffset(inode.Cluster) + int(inode.PartitionOffset)
+				nextCatalogueOffset := inode.ClusterOffset()
 
 				fmt.Printf("Name:%s Offset :%x next catalogue offset :%x\n",
 					string(inode.Name),
@@ -588,7 +598,7 @@ func (p *Partition) DeleteInode(inodeToDelete *Inode, folder *Inode, fp *os.File
 		return err
 	}
 
-	catalogueOffset := ClusterOffset(folder.Cluster) + int(folder.PartitionOffset)
+	catalogueOffset := folder.ClusterOffset()
 	_, err = fp.Seek(int64(catalogueOffset), io.SeekStart)
 	if err != nil {
 		return err
@@ -628,6 +638,32 @@ func (i *Inode) Delete() error {
 	return nil
 }
 
+func (p *Partition) FormatCatalogue(fp *os.File, folder *Inode) error {
+
+	offset := folder.ClusterOffset()
+	orig, err := fp.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return err
+	}
+	_, err = fp.Seek(int64(offset), io.SeekStart)
+	if err != nil {
+		return err
+	}
+	b := make([]byte, (4 * 0x200))
+	for i := 0; i < (4 * 0x200); i++ {
+		b[i] = 0xff
+	}
+	err = binary.Write(fp, binary.BigEndian, &b)
+	if err != nil {
+		return err
+	}
+	_, err = fp.Seek(orig, io.SeekStart)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (p *Partition) NewFolder(folderName string, fp *os.File, folder *Inode) error {
 	// transform file name
 	impdosName := ToImpdosName(folderName, true)
@@ -644,6 +680,12 @@ func (p *Partition) NewFolder(folderName string, fp *os.File, folder *Inode) err
 	folder.Inodes = append(folder.Inodes, newInode)
 	if len(folder.Inodes) > 64 && p.PartitionNumber != 0 {
 		return errors.New("catalogue exceed 64 entries")
+	}
+
+	// format track
+
+	if err := p.FormatCatalogue(fp, newInode); err != nil {
+		return err
 	}
 
 	// save on disk
