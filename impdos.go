@@ -552,6 +552,9 @@ func (i *Inode) ReadCatalogue(f *os.File) error {
 }
 
 func (i *Inode) IsEnd() bool {
+	if i.Name[0] == 0xE {
+		return true
+	}
 	return i.Type == EndOfCatalogueType
 }
 
@@ -682,6 +685,9 @@ func (p *Partition) NewFolder(folderName string, fp *os.File, folder *Inode) err
 		return errors.New("catalogue exceed 64 entries")
 	}
 
+	if p.PartitionNumber == 0 && len(folder.Inodes) > 511 {
+		return errors.New("catalogue exceed 511 entries")
+	}
 	// format track
 
 	if err := p.FormatCatalogue(fp, newInode); err != nil {
