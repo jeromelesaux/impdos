@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/google/uuid"
 )
 
 var (
@@ -85,6 +87,67 @@ func NewImpdos() *Impdos {
 	}
 }
 
+func (i *Inode) Path(k string, c map[string][]string) map[string][]string {
+	if !i.IsDir() {
+		path := fmt.Sprintf("%s\t%d ko\t(%s)", string(i.Name), (i.Size / 1024), i.Uuid)
+		c[k] = append(c[k], path)
+		return c
+	}
+	if i.IsDir() {
+		dir := make([]string, 0)
+		name := fmt.Sprintf("%s (%s)", string(i.Name), i.Uuid)
+		c[k] = append(c[k], name)
+		c[name] = dir
+		for _, v := range i.Inodes {
+			c = v.Path(name, c)
+		}
+	}
+	return c
+}
+
+func (i *Inode) GetInode(uuid string) *Inode {
+	if i.Uuid == uuid {
+		return i
+	}
+	for _, v := range i.Inodes {
+		if in := v.GetInode(uuid); in != nil {
+			return in
+		}
+	}
+	return nil
+}
+
+func (imp *Impdos) GetTreePath() map[string][]string {
+	t := make(map[string][]string)
+	t[""] = []string{}
+	for i := 0; i < len(imp.Partitions); i++ {
+		name := fmt.Sprintf("Partition [%d]",
+			imp.Partitions[0].PartitionNumber)
+		t[""] = append(t[""], name)
+		t = imp.Partitions[0].GetTreePath(t)
+	}
+	return t
+}
+
+func (p *Partition) GetTreePath(t map[string][]string) map[string][]string {
+
+	name := fmt.Sprintf("Partition [%d]",
+		p.PartitionNumber)
+	return p.Inode.Path(name, t)
+}
+
+func (imp *Impdos) GetNode(uuid string) *Inode {
+	if uuid == "" {
+		return imp.Partitions[0].Inode
+	}
+	for i := 0; i < len(imp.Partitions); i++ {
+		if node := imp.Partitions[i].Inode.GetInode(uuid); node != nil {
+			return node
+		}
+	}
+	return nil
+}
+
 func (imp *Impdos) ReadCatalogues() error {
 	for i := 0; i < len(imp.Partitions); i++ {
 		err := imp.ReadRootCatalogue(i)
@@ -110,12 +173,12 @@ func (p *Partition) ReadRootCatalogue(f *os.File) error {
 	if err != nil {
 		return err
 	}
-	inode := NewInode(p.PartitionOffset())
+	inode := NewInode(p.PartitionOffset(), nil, p)
 	inode.IsRoot = true
 	if err := inode.ReadCatalogue(f); err != nil {
 		return err
 	}
-	p.Inode = InitInode(p.PartitionOffset(), 2, 0, DirectoryType, []byte{})
+	p.Inode = InitInode(p.PartitionOffset(), nil, p, 2, 0, DirectoryType, []byte{})
 	p.Inode.IsRoot = true
 	p.Inode.Inodes = append(p.Inode.Inodes, inode.Inodes...)
 
@@ -253,7 +316,7 @@ func (p *Partition) SaveInode(fp *os.File, folder *Inode, newInode *Inode) error
 	}
 	// loop to find a new empty entry
 	for {
-		inode := NewInode(folder.PartitionOffset)
+		inode := NewInode(folder.PartitionOffset, nil, p)
 		if err := inode.Read(fp); err != nil {
 			return err
 		}
@@ -333,7 +396,7 @@ func NewPartition(number int) *Partition {
 	p := &Partition{
 		PartitionNumber: number,
 	}
-	p.Inode = NewInode(p.PartitionOffset())
+	p.Inode = NewInode(p.PartitionOffset(), nil, p)
 	return p
 }
 
@@ -454,6 +517,9 @@ type Inode struct {
 	Inodes          []*Inode // files in the directory
 	PartitionOffset int64
 	IsRoot          bool
+	Uuid            string
+	Previous        *Inode
+	Partition       *Partition
 }
 
 func (i *Inode) Save(f *os.File) error {
@@ -514,7 +580,7 @@ func isPrint(v []byte) bool {
 
 func (i *Inode) ReadCatalogue(f *os.File) error {
 	for {
-		inode := NewInode(i.PartitionOffset)
+		inode := NewInode(i.PartitionOffset, i, i.Partition)
 		if err := inode.Read(f); err != nil {
 			return err
 		}
@@ -558,17 +624,20 @@ func (i *Inode) IsEnd() bool {
 	return i.Type == EndOfCatalogueType
 }
 
-func NewInode(partitionOffset int64) *Inode {
+func NewInode(partitionOffset int64, previous *Inode, partition *Partition) *Inode {
 	return &Inode{
 		Name:            make([]byte, 11),
 		Unused:          make([]byte, 14),
 		Inodes:          make([]*Inode, 0),
 		PartitionOffset: partitionOffset,
+		Uuid:            uuid.New().String(),
+		Previous:        previous,
+		Partition:       partition,
 	}
 }
 
-func InitInode(partitionOffset int64, cluster uint16, size uint32, inodeType byte, name []byte) *Inode {
-	inode := NewInode(partitionOffset)
+func InitInode(partitionOffset int64, previous *Inode, partition *Partition, cluster uint16, size uint32, inodeType byte, name []byte) *Inode {
+	inode := NewInode(partitionOffset, previous, partition)
 	inode.Cluster = cluster
 	inode.Size = size
 	inode.Type = inodeType
@@ -583,7 +652,7 @@ func (in *Inode) IsDir() bool {
 
 // secteur du catalgoue root toujours en secteur 201 soit offset 0x200*0x201 (512*513) 262656
 
-func (i *Inode) findInode(name []byte) *Inode {
+func (i *Inode) FindInode(name []byte) *Inode {
 	toSearch := strings.Trim(string(name), " ")
 	for _, v := range i.Inodes {
 		v1 := strings.Trim(string(v.Name), " ")
@@ -609,7 +678,7 @@ func (p *Partition) DeleteInode(inodeToDelete *Inode, folder *Inode, fp *os.File
 
 	// loop to find a new empty entry
 	for {
-		inode := NewInode(folder.PartitionOffset)
+		inode := NewInode(folder.PartitionOffset, nil, p)
 		if err := inode.Read(fp); err != nil {
 			return err
 		}
@@ -677,7 +746,7 @@ func (p *Partition) NewFolder(folderName string, fp *os.File, folder *Inode) err
 	}
 
 	// add new inode
-	newInode := InitInode(p.PartitionOffset(), nextCluster, 0, DirectoryType, impdosName)
+	newInode := InitInode(p.PartitionOffset(), folder, p, nextCluster, 0, DirectoryType, impdosName)
 
 	// insert new inode in catalogue
 	folder.Inodes = append(folder.Inodes, newInode)
@@ -711,11 +780,11 @@ func (p *Partition) NewFolder(folderName string, fp *os.File, folder *Inode) err
 	// now create the trash folder for the new folder
 	// add Trash folder into newInode
 	trashName := ToImpdosName("TRASH", true)
-	originalTrash := folder.findInode([]byte("TRASH"))
+	originalTrash := folder.FindInode([]byte("TRASH"))
 	if originalTrash == nil {
 		return errors.New("folder does not contain any trash folder")
 	}
-	trashInode := InitInode(p.PartitionOffset(), originalTrash.Cluster, 0, DirectoryType, trashName)
+	trashInode := InitInode(p.PartitionOffset(), newInode, p, originalTrash.Cluster, 0, DirectoryType, trashName)
 
 	// save on disk
 	if err := p.SaveInode(fp, newInode, trashInode); err != nil {
@@ -734,7 +803,7 @@ func (p *Partition) NewFolder(folderName string, fp *os.File, folder *Inode) err
 
 	// now upper inode
 	upperFolder := ToImpdosName("..", true)
-	upperInode := InitInode(p.PartitionOffset(), folder.Cluster, 0, DirectoryType, upperFolder)
+	upperInode := InitInode(p.PartitionOffset(), newInode, p, folder.Cluster, 0, DirectoryType, upperFolder)
 
 	// save on disk
 	if err := p.SaveInode(fp, newInode, upperInode); err != nil {
@@ -769,7 +838,7 @@ func (p *Partition) Save(filename string, fp *os.File, folder *Inode) error {
 	}
 
 	// add new inode
-	newInode := InitInode(p.PartitionOffset(), nextCluster, uint32(len(b)), FileType, impdosName)
+	newInode := InitInode(p.PartitionOffset(), folder, p, nextCluster, uint32(len(b)), FileType, impdosName)
 
 	// insert new inode in catalogue
 	folder.Inodes = append(folder.Inodes, newInode)
