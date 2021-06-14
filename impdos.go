@@ -93,7 +93,7 @@ func (i *Inode) Path(k string, c map[string][]string) map[string][]string {
 		c[k] = append(c[k], path)
 		return c
 	}
-	if i.IsDir() {
+	if i.IsDir() && i.IsListable() {
 		dir := make([]string, 0)
 		name := fmt.Sprintf("%s (%s)", string(i.Name), i.Uuid)
 		c[k] = append(c[k], name)
@@ -122,9 +122,9 @@ func (imp *Impdos) GetTreePath() map[string][]string {
 	t[""] = []string{}
 	for i := 0; i < len(imp.Partitions); i++ {
 		name := fmt.Sprintf("Partition [%d]",
-			imp.Partitions[0].PartitionNumber)
+			imp.Partitions[i].PartitionNumber)
 		t[""] = append(t[""], name)
-		t = imp.Partitions[0].GetTreePath(t)
+		t = imp.Partitions[i].GetTreePath(t)
 	}
 	return t
 }
@@ -648,6 +648,17 @@ func InitInode(partitionOffset int64, previous *Inode, partition *Partition, clu
 
 func (in *Inode) IsDir() bool {
 	return in.Type == DirectoryType
+}
+
+func (i *Inode) IsListable() bool {
+	if i.Name[0] == 0xE5 {
+		return false
+	}
+
+	if i.Name[0] == 46 && i.Name[1] == 46 {
+		return false
+	}
+	return true
 }
 
 // secteur du catalgoue root toujours en secteur 201 soit offset 0x200*0x201 (512*513) 262656

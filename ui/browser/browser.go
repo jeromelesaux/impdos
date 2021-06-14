@@ -55,10 +55,15 @@ func GenerateFile(name string, folder *impdos.Inode) *impdos.Inode {
 }
 
 func (b *Browser) Load(app fyne.App) {
-	b.imp = impdos.NewImpdos()
-	b.imp.Partitions = append(b.imp.Partitions, impdos.NewPartition(0))
-	b.imp.Partitions[0].Inode = GenerateFS(b.imp.Partitions[0])
-
+	var err error
+	b.imp, err = impdos.Read("/Users/jeromelesaux/Downloads/impdos_dump.img")
+	if err != nil {
+		fmt.Printf("[LOADING] error :%v\n", err)
+	}
+	err = b.imp.ReadCatalogues()
+	if err != nil {
+		fmt.Printf("[LOADING] error :%v\n", err)
+	}
 	t := b.imp.GetTreePath()
 	fmt.Printf("%v", t)
 	tree := widget.NewTreeWithStrings(t)
@@ -73,7 +78,7 @@ func (b *Browser) Load(app fyne.App) {
 		tree)
 	win := app.NewWindow("IMPDos explorer")
 	win.SetContent(grid)
-	win.Resize(fyne.NewSize(400, 400))
+	win.Resize(fyne.NewSize(800, 400))
 	win.SetTitle("IMPDos explorer")
 	win.Show()
 }
