@@ -89,13 +89,13 @@ func NewImpdos() *Impdos {
 
 func (i *Inode) Path(k string, c map[string][]string) map[string][]string {
 	if !i.IsDir() {
-		path := fmt.Sprintf("%s\t%d ko\t(%s)", string(i.Name), (i.Size / 1024), i.Uuid)
+		path := fmt.Sprintf("%s\t%d ko\t(%s)", i.GetName(), (i.Size / 1024), i.Uuid)
 		c[k] = append(c[k], path)
 		return c
 	}
 	if i.IsDir() && i.IsListable() {
 		dir := make([]string, 0)
-		name := fmt.Sprintf("%s (%s)", string(i.Name), i.Uuid)
+		name := fmt.Sprintf("%s (%s)", i.GetName(), i.Uuid)
 		c[k] = append(c[k], name)
 		c[name] = dir
 		for _, v := range i.Inodes {
@@ -522,6 +522,28 @@ type Inode struct {
 	Partition       *Partition
 }
 
+func (in *Inode) GetName() string {
+	var s string
+	for i := 0; i < len(in.Name); i++ {
+		var c byte = 32
+		if in.Name[i] >= 48 && in.Name[i] <= 57 {
+			c = in.Name[i]
+		}
+		if in.Name[i] >= 65 && in.Name[i] <= 90 {
+			c = in.Name[i]
+		}
+		if in.Name[i] >= 97 && in.Name[i] <= 122 {
+			c = in.Name[i]
+		}
+		if in.Name[i] == 46 {
+			c = in.Name[i]
+		}
+
+		s += string(c)
+	}
+	return s
+}
+
 func (i *Inode) Save(f *os.File) error {
 	if err := binary.Write(f, binary.BigEndian, i.Name); err != nil {
 		return err
@@ -654,8 +676,10 @@ func (i *Inode) IsListable() bool {
 	if i.Name[0] == 0xE5 {
 		return false
 	}
-
-	if i.Name[0] == 46 && i.Name[1] == 46 {
+	if i.Name[0] == 46 {
+		return false
+	}
+	if string(i.Name) == "TRASH      " {
 		return false
 	}
 	return true

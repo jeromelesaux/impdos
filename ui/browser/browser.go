@@ -10,7 +10,9 @@ import (
 )
 
 type Browser struct {
-	imp *impdos.Impdos
+	imp      *impdos.Impdos
+	treeData map[string][]string
+	treeView *widget.Tree
 }
 
 func NewBrowser() *Browser {
@@ -56,7 +58,7 @@ func GenerateFile(name string, folder *impdos.Inode) *impdos.Inode {
 
 func (b *Browser) Load(app fyne.App) {
 	var err error
-	b.imp, err = impdos.Read("/Users/jeromelesaux/Downloads/impdos_dump.img")
+	b.imp, err = impdos.Read("/Users/jeromelesaux/Downloads/impdos_master_dump.img")
 	if err != nil {
 		fmt.Printf("[LOADING] error :%v\n", err)
 	}
@@ -64,21 +66,21 @@ func (b *Browser) Load(app fyne.App) {
 	if err != nil {
 		fmt.Printf("[LOADING] error :%v\n", err)
 	}
-	t := b.imp.GetTreePath()
-	fmt.Printf("%v", t)
-	tree := widget.NewTreeWithStrings(t)
-	tree.OnSelected = func(id string) {
+	b.treeData = b.imp.GetTreePath()
+
+	b.treeView = widget.NewTreeWithStrings(b.treeData)
+	b.treeView.OnSelected = func(id string) {
 		fmt.Printf("Tree node selected: %s", id)
 	}
-	tree.OnUnselected = func(id string) {
-		fmt.Printf("Tree node unselected: %s", id)
-	}
-
+	/*	tree.OnUnselected = func(id string) {
+			fmt.Printf("Tree node unselected: %s", id)
+		}
+	*/
 	grid := container.NewGridWithColumns(1,
-		tree)
+		b.treeView)
 	win := app.NewWindow("IMPDos explorer")
 	win.SetContent(grid)
-	win.Resize(fyne.NewSize(800, 400))
+	win.Resize(fyne.NewSize(1000, 800))
 	win.SetTitle("IMPDos explorer")
 	win.Show()
 }
