@@ -24,6 +24,7 @@ type Browser struct {
 	devicePath   *widget.Entry
 	window       fyne.Window
 	treeViewGrid *fyne.Container
+	uuidSelected string
 }
 
 func (b *Browser) updateUi() {
@@ -82,6 +83,7 @@ func (b *Browser) LoadDom(device string) {
 		var uuid string
 		if start >= 0 && end >= 0 {
 			uuid = id[start+1 : end]
+			b.uuidSelected = uuid
 		}
 		fmt.Printf("Tree node selected: %s with uuid :%s\n", id, uuid)
 	}
@@ -167,7 +169,6 @@ func (b *Browser) Load(app fyne.App) {
 		inkContainer,
 		autoexecButton)
 
-	//b.LoadDom("/Users/jeromelesaux/Downloads/impdos_master_dump.img")
 	b.treeView = widget.NewTree(nil, nil, nil, nil)
 
 	backupButton := widget.NewButton("Backup your ImpDOS DOM", func() {})
