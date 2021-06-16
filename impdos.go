@@ -267,13 +267,13 @@ func (p *Partition) SaveN(f *os.File, cluster uint16, size uint32) error {
 	return nil
 }
 
-func (p *Partition) SaveInodeEntry(fp *os.File, entry *Inode) error {
+func (p *Partition) SaveInodeEntry(fp *os.File, folder *Inode, entry *Inode) error {
 	offset, err := fp.Seek(0, io.SeekCurrent)
 	if err != nil {
 		return err
 	}
 
-	catalogueOffset := entry.ClusterOffset()
+	catalogueOffset := folder.ClusterOffset()
 	_, err = fp.Seek(int64(catalogueOffset), io.SeekStart)
 	if err != nil {
 		return err
@@ -284,7 +284,7 @@ func (p *Partition) SaveInodeEntry(fp *os.File, entry *Inode) error {
 		if err := inode.Read(fp); err != nil {
 			return err
 		}
-		if inode.Cluster == entry.Cluster && inode.GetName() == entry.GetName() {
+		if inode.Cluster == entry.Cluster {
 			break
 		}
 		if inode.IsEnd() {

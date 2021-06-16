@@ -359,7 +359,8 @@ func (b *Browser) Load(app fyne.App) {
 					return
 				}
 				pn := node.Partition.PartitionNumber
-				if err := b.imp.Partitions[pn].SaveInodeEntry(b.imp.Pointer, node); err != nil {
+				folder := node.Previous
+				if err := b.imp.Partitions[pn].SaveInodeEntry(b.imp.Pointer, folder, node); err != nil {
 					dialog.ShowError(err, b.window)
 					return
 				}
