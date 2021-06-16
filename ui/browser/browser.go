@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -98,6 +99,43 @@ func (b *Browser) LoadDom(device string) {
 	}
 	b.treeViewGrid.Objects[0] = b.treeView
 	b.treeView.Refresh()
+}
+
+func (b *Browser) extractFile(dest string, node *impdos.Inode) error {
+	content, err := node.Get(b.imp.Pointer)
+	if err != nil {
+		return err
+	}
+	fw, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer fw.Close()
+	_, err = fw.Write(content)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (b *Browser) extractFolder(root string, node *impdos.Inode) error {
+	for _, next := range node.Inodes {
+		if next.IsListable() {
+			if next.IsDir() {
+				newDest := filepath.Join(root, next.GetName())
+				os.Mkdir(newDest, os.ModePerm)
+				if err := b.extractFolder(newDest, next); err != nil {
+					return err
+				}
+			} else {
+				dest := filepath.Join(root, next.GetName())
+				if err := b.extractFile(dest, next); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (b *Browser) Load(app fyne.App) {
@@ -314,13 +352,59 @@ func (b *Browser) Load(app fyne.App) {
 		}, b.window)
 	})
 	extractButton := widget.NewButton("Extract files or folder from you ImpDOS DOM", func() {
-		dialog.ShowFileSave(func(writer fyne.URIWriteCloser, err error) {
-			if err != nil {
-				dialog.ShowError(err, b.window)
-				return
-			}
+		if b.devicePath.Text == "" {
+			dialog.ShowError(errors.New("no device selected"), b.window)
+			return
+		}
+		if b.uuidSelected == "" {
+			dialog.ShowError(errors.New("you did not select a destination folder"), b.window)
+			return
+		}
+		node := b.imp.GetInode(b.uuidSelected)
+		if node == nil {
+			dialog.ShowError(errors.New("can not find the folder"), b.window)
+			return
+		}
+		if node.IsDir() {
+			dialog.ShowFolderOpen(func(list fyne.ListableURI, err error) {
+				if err != nil {
+					dialog.ShowError(err, b.window)
+					return
+				}
+				root := list.Path()
+				root = filepath.Join(root, node.GetName())
+				os.Mkdir(root, os.ModePerm)
 
-		}, b.window)
+				if err := b.extractFolder(root, node); err != nil {
+					dialog.ShowError(err, b.window)
+					return
+				}
+			}, b.window)
+		} else {
+			dialog.ShowFileSave(func(writer fyne.URIWriteCloser, err error) {
+				if err != nil {
+					dialog.ShowError(err, b.window)
+					return
+				}
+				dest := writer.URI().Path()
+				content, err := node.Get(b.imp.Pointer)
+				if err != nil {
+					dialog.ShowError(err, b.window)
+					return
+				}
+				fw, err := os.Create(dest)
+				if err != nil {
+					dialog.ShowError(err, b.window)
+					return
+				}
+				defer fw.Close()
+				_, err = fw.Write(content)
+				if err != nil {
+					dialog.ShowError(err, b.window)
+					return
+				}
+			}, b.window)
+		}
 	})
 	importButton := widget.NewButton("Import your files or folder to your ImpDOS DOM", func() {
 		dialog.ShowFolderOpen(func(list fyne.ListableURI, err error) {
