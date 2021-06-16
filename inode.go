@@ -100,6 +100,7 @@ func (in *Inode) GetName() string {
 	var s string
 	for i := 0; i < len(in.Name); i++ {
 		var c byte = 32
+
 		if in.Name[i] >= 48 && in.Name[i] <= 57 {
 			c = in.Name[i]
 		}
@@ -112,9 +113,12 @@ func (in *Inode) GetName() string {
 		if in.Name[i] == 46 {
 			c = in.Name[i]
 		}
-
+		if i == 7 && !in.IsDir() {
+			c = '.'
+		}
 		s += string(c)
 	}
+
 	return s
 }
 

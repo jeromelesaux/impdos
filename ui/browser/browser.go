@@ -264,7 +264,11 @@ func (b *Browser) Load(app fyne.App) {
 				dialog.ShowError(err, b.window)
 				return
 			}
+			if writer == nil {
+				return
+			}
 			backupFile := writer.URI().Path()
+			backupFile += ".ibc"
 			np := dialog.NewProgress("backup your DOM", "Backup DOM to "+backupFile, b.window)
 			go func() {
 				f, err := os.Create(backupFile)
@@ -317,12 +321,15 @@ func (b *Browser) Load(app fyne.App) {
 			dialog.ShowError(errors.New("no device selected"), b.window)
 			return
 		}
-		dialog.ShowFileSave(func(writer fyne.URIWriteCloser, err error) {
+		dialog.ShowFileOpen(func(reader fyne.URIReadCloser, err error) {
 			if err != nil {
 				dialog.ShowError(err, b.window)
 				return
 			}
-			backupFile := writer.URI().Path()
+			if reader == nil {
+				return
+			}
+			backupFile := reader.URI().Path()
 			np := dialog.NewProgress("backup your DOM", "Backup DOM to "+backupFile, b.window)
 			go func() {
 				f, err := os.Create(b.devicePath.Text)
@@ -389,6 +396,9 @@ func (b *Browser) Load(app fyne.App) {
 					dialog.ShowError(err, b.window)
 					return
 				}
+				if list == nil {
+					return
+				}
 				root := list.Path()
 				root = filepath.Join(root, node.GetName())
 				os.Mkdir(root, os.ModePerm)
@@ -402,6 +412,9 @@ func (b *Browser) Load(app fyne.App) {
 			dialog.ShowFileSave(func(writer fyne.URIWriteCloser, err error) {
 				if err != nil {
 					dialog.ShowError(err, b.window)
+					return
+				}
+				if writer == nil {
 					return
 				}
 				dest := writer.URI().Path()
@@ -439,6 +452,9 @@ func (b *Browser) Load(app fyne.App) {
 				dialog.ShowError(err, b.window)
 				return
 			}
+			if list == nil {
+				return
+			}
 			root := list.Path()
 			rootName := filepath.Base(root)
 			if err := b.imp.Partitions[node.Partition.PartitionNumber].NewFolder(rootName, b.imp.Pointer, node); err != nil {
@@ -466,6 +482,9 @@ func (b *Browser) Load(app fyne.App) {
 		dialog.ShowFileOpen(func(writer fyne.URIReadCloser, err error) {
 			if err != nil {
 				dialog.ShowError(err, b.window)
+				return
+			}
+			if writer == nil {
 				return
 			}
 			filePath := writer.URI().Path()
