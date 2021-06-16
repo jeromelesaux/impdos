@@ -94,6 +94,9 @@ func (i *Inode) GetHighestN() uint16 {
 }
 
 func (in *Inode) GetName() string {
+	if in.Name[0] == 32 {
+		return fmt.Sprintf("Partition-%d-root", in.Partition.PartitionNumber)
+	}
 	var s string
 	for i := 0; i < len(in.Name); i++ {
 		var c byte = 32

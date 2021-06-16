@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -138,6 +139,31 @@ func (b *Browser) extractFolder(root string, node *impdos.Inode) error {
 	return nil
 }
 
+func (b *Browser) importFolder(from string, node *impdos.Inode) error {
+
+	files, err := ioutil.ReadDir(from)
+	if err != nil {
+		return err
+	}
+	for _, file := range files {
+		if !file.IsDir() {
+			filePath := filepath.Join(from, file.Name())
+			if err := b.imp.Partitions[node.Partition.PartitionNumber].Save(filePath, b.imp.Pointer, node); err != nil {
+				return err
+			}
+		} else {
+			folderPath := filepath.Join(from, file.Name())
+			if err := b.imp.Partitions[node.Partition.PartitionNumber].NewFolder(folderPath, b.imp.Pointer, node); err != nil {
+				return err
+			}
+			if err := b.importFolder(folderPath, node.Inodes[len(node.Inodes)-1]); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (b *Browser) Load(app fyne.App) {
 
 	/*	tree.OnUnselected = func(id string) {
@@ -225,14 +251,6 @@ func (b *Browser) Load(app fyne.App) {
 			return
 		}
 	})
-
-	autoexecContainer := container.NewGridWithRows(6,
-		deviceW,
-		modeContainer,
-		borderContainer,
-		paperContainer,
-		inkContainer,
-		autoexecButton)
 
 	b.treeView = widget.NewTree(nil, nil, nil, nil)
 
@@ -406,23 +424,55 @@ func (b *Browser) Load(app fyne.App) {
 			}, b.window)
 		}
 	})
-	importButton := widget.NewButton("Import your files or folder to your ImpDOS DOM", func() {
+	importFolderButton := widget.NewButton("Import a folder to your ImpDOS DOM", func() {
+		if b.uuidSelected == "" {
+			dialog.ShowError(errors.New("you did not select a folder"), b.window)
+			return
+		}
+		node := b.imp.GetInode(b.uuidSelected)
+		if node == nil {
+			dialog.ShowError(errors.New("can not find the folder"), b.window)
+			return
+		}
 		dialog.ShowFolderOpen(func(list fyne.ListableURI, err error) {
 			if err != nil {
 				dialog.ShowError(err, b.window)
 				return
 			}
-			if list == nil {
+			root := list.Path()
+			rootName := filepath.Base(root)
+			if err := b.imp.Partitions[node.Partition.PartitionNumber].NewFolder(rootName, b.imp.Pointer, node); err != nil {
+				dialog.ShowError(err, b.window)
 				return
 			}
 
-			children, err := list.List()
+			if err := b.importFolder(root, node); err != nil {
+				dialog.ShowError(err, b.window)
+				return
+			}
+
+		}, b.window)
+	})
+	importFileButton := widget.NewButton("Import a file to your ImpDOS DOM", func() {
+		if b.uuidSelected == "" {
+			dialog.ShowError(errors.New("you did not select a folder"), b.window)
+			return
+		}
+		node := b.imp.GetInode(b.uuidSelected)
+		if node == nil {
+			dialog.ShowError(errors.New("can not find the folder"), b.window)
+			return
+		}
+		dialog.ShowFileOpen(func(writer fyne.URIReadCloser, err error) {
 			if err != nil {
 				dialog.ShowError(err, b.window)
 				return
 			}
-			out := fmt.Sprintf("Folder %s (%d children):\n%s", list.Name(), len(children), list.String())
-			dialog.ShowInformation("Folder Open", out, b.window)
+			filePath := writer.URI().Path()
+			if err := b.imp.Partitions[node.Partition.PartitionNumber].Save(filePath, b.imp.Pointer, node); err != nil {
+				dialog.ShowError(err, b.window)
+				return
+			}
 		}, b.window)
 	})
 	deleteNode := widget.NewButton("Delete the selected file or folder", func() {
@@ -475,19 +525,23 @@ func (b *Browser) Load(app fyne.App) {
 			},
 			b.window)
 	})
-
-	domActionsContainer := container.NewGridWithRows(6,
+	autoexecInfo := container.NewGridWithColumns(2,
+		modeContainer,
+		borderContainer,
+		paperContainer,
+		inkContainer,
+	)
+	cmdContainer := container.NewGridWithRows(10,
+		deviceW,
+		autoexecInfo,
+		autoexecButton,
 		backupButton,
 		restoreButton,
 		extractButton,
-		importButton,
+		importFolderButton,
+		importFileButton,
 		deleteNode,
 		createFolder)
-
-	cmdContainer := container.NewGridWithRows(2,
-		autoexecContainer,
-		domActionsContainer,
-	)
 
 	b.treeViewGrid = container.NewGridWithColumns(2,
 		b.treeView,
