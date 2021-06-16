@@ -1,7 +1,9 @@
 package browser
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -47,15 +49,21 @@ func NewBrowser() *Browser {
 	return &Browser{}
 }
 
+func (b *Browser) ReloadUI() {
+	b.LoadDom(b.devicePath.Text)
+}
+
 func (b *Browser) LoadDom(device string) {
 	var err error
 	b.imp, err = impdos.Read(device)
 	if err != nil {
 		fmt.Printf("[LOADING] error :%v\n", err)
+		dialog.ShowError(err, b.window)
 	}
 	err = b.imp.ReadCatalogues()
 	if err != nil {
 		fmt.Printf("[LOADING] error :%v\n", err)
+		dialog.ShowError(err, b.window)
 	}
 	b.devicePath.SetText(device)
 	b.updateUi()
@@ -100,7 +108,7 @@ func (b *Browser) Load(app fyne.App) {
 
 	// chemin du path du device
 	b.devicePath = widget.NewEntry()
-	b.devicePath.SetText("Device path:")
+	b.devicePath.SetText("")
 	b.devicePath.OnSubmitted = func(v string) {
 		var err error
 		b.imp, err = impdos.Read(v)
@@ -160,9 +168,26 @@ func (b *Browser) Load(app fyne.App) {
 		b.ink,
 	)
 
-	autoexecButton := widget.NewButton("Apply autoexec.", func() {})
+	autoexecButton := widget.NewButton("Apply autoexec.", func() {
+		var border, ink, paper, mode byte
+		fmt.Sscanf(b.border.Text, "%d", &border)
+		fmt.Sscanf(b.ink.Text, "%d", &ink)
+		fmt.Sscanf(b.paper.Text, "%d", &paper)
+		fmt.Sscanf(b.mode.Text, "%d", &mode)
+		a := &impdos.AutoExec{
+			Border: border,
+			Paper:  paper,
+			Ink:    ink,
+			Mode:   mode,
+		}
+		if err := b.imp.SaveAutoexec(a); err != nil {
+			dialog.ShowError(err, b.window)
+			return
+		}
+	})
 
-	autoexecContainer := container.NewGridWithRows(5,
+	autoexecContainer := container.NewGridWithRows(6,
+		deviceW,
 		modeContainer,
 		borderContainer,
 		paperContainer,
@@ -171,12 +196,190 @@ func (b *Browser) Load(app fyne.App) {
 
 	b.treeView = widget.NewTree(nil, nil, nil, nil)
 
-	backupButton := widget.NewButton("Backup your ImpDOS DOM", func() {})
-	restoreButton := widget.NewButton("Restore your ImpDOS DOM", func() {})
-	extractButton := widget.NewButton("Extract files or folder from you ImpDOS DOM", func() {})
-	importButton := widget.NewButton("Import your files or folder to your ImpDOS DOM", func() {})
-	deleteNode := widget.NewButton("Delete the selected file or folder", func() {})
-	createFolder := widget.NewButton("Create new folder", func() {})
+	backupButton := widget.NewButton("Backup your ImpDOS DOM", func() {
+		if b.devicePath.Text == "" {
+			dialog.ShowError(errors.New("no device selected"), b.window)
+			return
+		}
+		dialog.ShowFileSave(func(writer fyne.URIWriteCloser, err error) {
+			if err != nil {
+				dialog.ShowError(err, b.window)
+				return
+			}
+			backupFile := writer.URI().Path()
+			np := dialog.NewProgress("backup your DOM", "Backup DOM to "+backupFile, b.window)
+			go func() {
+				f, err := os.Create(backupFile)
+				if err != nil {
+					dialog.ShowError(err, b.window)
+					np.Hide()
+					return
+				}
+				defer f.Close()
+				buf := make([]byte, 1024)
+				fr, err := os.Open(b.devicePath.Text)
+				if err != nil {
+					dialog.ShowError(err, b.window)
+					np.Hide()
+					return
+				}
+				defer fr.Close()
+				nb, err := fr.Seek(0, os.SEEK_END)
+				if err != nil {
+					dialog.ShowError(err, b.window)
+					np.Hide()
+					return
+				}
+				var copied int
+				for {
+					_, err := f.Read(buf)
+					if err != nil {
+						break
+					}
+					n, err := fr.Write(buf)
+					if err != nil {
+						dialog.ShowError(err, b.window)
+						np.Hide()
+						return
+					}
+					copied += n
+					np.SetValue(float64(copied) / float64(nb))
+				}
+			}()
+			np.Show()
+
+		}, b.window)
+	})
+	restoreButton := widget.NewButton("Restore your ImpDOS DOM", func() {
+		if b.devicePath.Text == "" {
+			dialog.ShowError(errors.New("no device selected"), b.window)
+			return
+		}
+		dialog.ShowFileSave(func(writer fyne.URIWriteCloser, err error) {
+			if err != nil {
+				dialog.ShowError(err, b.window)
+				return
+			}
+			backupFile := writer.URI().Path()
+			np := dialog.NewProgress("backup your DOM", "Backup DOM to "+backupFile, b.window)
+			go func() {
+				f, err := os.Create(b.devicePath.Text)
+				if err != nil {
+					dialog.ShowError(err, b.window)
+					np.Hide()
+					return
+				}
+				defer f.Close()
+				buf := make([]byte, 1024)
+				fr, err := os.Open(backupFile)
+				if err != nil {
+					dialog.ShowError(err, b.window)
+					np.Hide()
+					return
+				}
+				defer fr.Close()
+				nb, err := fr.Seek(0, os.SEEK_END)
+				if err != nil {
+					dialog.ShowError(err, b.window)
+					np.Hide()
+					return
+				}
+				var copied int
+				for {
+					_, err := f.Read(buf)
+					if err != nil {
+						break
+					}
+					n, err := fr.Write(buf)
+					if err != nil {
+						dialog.ShowError(err, b.window)
+						np.Hide()
+						return
+					}
+					copied += n
+					np.SetValue(float64(copied) / float64(nb))
+				}
+			}()
+			np.Show()
+		}, b.window)
+	})
+	extractButton := widget.NewButton("Extract files or folder from you ImpDOS DOM", func() {
+		dialog.ShowFileSave(func(writer fyne.URIWriteCloser, err error) {
+			if err != nil {
+				dialog.ShowError(err, b.window)
+				return
+			}
+
+		}, b.window)
+	})
+	importButton := widget.NewButton("Import your files or folder to your ImpDOS DOM", func() {
+		dialog.ShowFolderOpen(func(list fyne.ListableURI, err error) {
+			if err != nil {
+				dialog.ShowError(err, b.window)
+				return
+			}
+			if list == nil {
+				return
+			}
+
+			children, err := list.List()
+			if err != nil {
+				dialog.ShowError(err, b.window)
+				return
+			}
+			out := fmt.Sprintf("Folder %s (%d children):\n%s", list.Name(), len(children), list.String())
+			dialog.ShowInformation("Folder Open", out, b.window)
+		}, b.window)
+	})
+	deleteNode := widget.NewButton("Delete the selected file or folder", func() {
+		if b.uuidSelected == "" {
+			dialog.ShowError(errors.New("you did not select a folder"), b.window)
+			return
+		}
+		node := b.imp.GetInode(b.uuidSelected)
+		if node == nil {
+			dialog.ShowError(errors.New("can not find the folder"), b.window)
+			return
+		}
+		dialog.ShowConfirm("Delete Folder",
+			"confirm your choice.",
+			func(confirm bool) {
+				if err := node.Delete(); err != nil {
+					dialog.ShowError(err, b.window)
+					return
+				}
+				pn := node.Partition.PartitionNumber
+				if err := b.imp.Partitions[pn].SaveInodeEntry(b.imp.Pointer, node); err != nil {
+					dialog.ShowError(err, b.window)
+					return
+				}
+				b.ReloadUI()
+
+			},
+			b.window)
+	})
+	createFolder := widget.NewButton("Create new folder", func() {
+		if b.uuidSelected == "" {
+			dialog.ShowError(errors.New("you did not select a folder"), b.window)
+			return
+		}
+		node := b.imp.GetInode(b.uuidSelected)
+		if node == nil {
+			dialog.ShowError(errors.New("can not find the folder"), b.window)
+			return
+		}
+		dialog.ShowEntryDialog("Please choose a folder name",
+			"Will create a new folder on your DOM",
+			func(ok string) {
+				pn := node.Partition.PartitionNumber
+				if err := b.imp.Partitions[pn].NewFolder(ok, b.imp.Pointer, node); err != nil {
+					dialog.ShowError(err, b.window)
+					return
+				}
+				b.ReloadUI()
+			},
+			b.window)
+	})
 
 	domActionsContainer := container.NewGridWithRows(6,
 		backupButton,
@@ -186,8 +389,7 @@ func (b *Browser) Load(app fyne.App) {
 		deleteNode,
 		createFolder)
 
-	cmdContainer := container.NewGridWithRows(3,
-		deviceW,
+	cmdContainer := container.NewGridWithRows(2,
 		autoexecContainer,
 		domActionsContainer,
 	)

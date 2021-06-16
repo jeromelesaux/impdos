@@ -221,6 +221,26 @@ func (imp *Impdos) ReadAutoExec() (*AutoExec, error) {
 	return a, nil
 }
 
+func (imp *Impdos) SaveAutoexec(a *AutoExec) error {
+	offset, err := imp.Pointer.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return err
+	}
+
+	_, err = imp.Pointer.Seek(0x400, io.SeekStart)
+	if err != nil {
+		return err
+	}
+	if err := binary.Write(imp.Pointer, binary.LittleEndian, a); err != nil {
+		return err
+	}
+	_, err = imp.Pointer.Seek(int64(offset), io.SeekStart) // return to initial offset
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (p *Partition) SaveN(f *os.File, cluster uint16, size uint32) error {
 	partitionOffset := p.PartitionOffset()
 	sector1 := partitionOffset + 0x201
@@ -241,6 +261,46 @@ func (p *Partition) SaveN(f *os.File, cluster uint16, size uint32) error {
 		return err
 	}
 	_, err = f.Seek(offset, io.SeekStart)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *Partition) SaveInodeEntry(fp *os.File, entry *Inode) error {
+	offset, err := fp.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return err
+	}
+
+	catalogueOffset := entry.ClusterOffset()
+	_, err = fp.Seek(int64(catalogueOffset), io.SeekStart)
+	if err != nil {
+		return err
+	}
+	// loop to find a new empty entry
+	for {
+		inode := NewInode(entry.PartitionOffset, nil, p)
+		if err := inode.Read(fp); err != nil {
+			return err
+		}
+		if inode.Cluster == entry.Cluster && inode.GetName() == entry.GetName() {
+			break
+		}
+		if inode.IsEnd() {
+			break
+		}
+	}
+
+	// go to the start of the inode entry position in dom
+	_, err = fp.Seek(-32, io.SeekCurrent)
+	if err != nil {
+		return err
+	}
+	if err := entry.Save(fp); err != nil {
+		return err
+	}
+	_, err = fp.Seek(int64(offset), io.SeekStart) // return to initial offset
 	if err != nil {
 		return err
 	}
