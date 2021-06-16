@@ -3,6 +3,7 @@ package browser
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -179,6 +180,7 @@ func (b *Browser) Load(app fyne.App) {
 			Paper:  paper,
 			Ink:    ink,
 			Mode:   mode,
+			End:    0xff,
 		}
 		if err := b.imp.SaveAutoexec(a); err != nil {
 			dialog.ShowError(err, b.window)
@@ -224,19 +226,21 @@ func (b *Browser) Load(app fyne.App) {
 					return
 				}
 				defer fr.Close()
-				nb, err := fr.Seek(0, os.SEEK_END)
+				nb, err := fr.Seek(0, io.SeekEnd)
 				if err != nil {
 					dialog.ShowError(err, b.window)
 					np.Hide()
 					return
 				}
+				fr.Seek(0, io.SeekStart)
 				var copied int
 				for {
-					_, err := f.Read(buf)
+					_, err := fr.Read(buf)
 					if err != nil {
+						fmt.Printf("[RESTORE BACKUP] error :%v\n", err)
 						break
 					}
-					n, err := fr.Write(buf)
+					n, err := f.Write(buf)
 					if err != nil {
 						dialog.ShowError(err, b.window)
 						np.Hide()
@@ -245,6 +249,8 @@ func (b *Browser) Load(app fyne.App) {
 					copied += n
 					np.SetValue(float64(copied) / float64(nb))
 				}
+				np.Hide()
+				dialog.ShowInformation("Backup ended", "Your image backup is here"+backupFile, b.window)
 			}()
 			np.Show()
 
@@ -284,13 +290,15 @@ func (b *Browser) Load(app fyne.App) {
 					np.Hide()
 					return
 				}
+				fr.Seek(0, io.SeekStart)
 				var copied int
 				for {
-					_, err := f.Read(buf)
+					_, err := fr.Read(buf)
 					if err != nil {
+						fmt.Printf("[RESTORE BACKUP] error :%v\n", err)
 						break
 					}
-					n, err := fr.Write(buf)
+					n, err := f.Write(buf)
 					if err != nil {
 						dialog.ShowError(err, b.window)
 						np.Hide()
@@ -299,6 +307,8 @@ func (b *Browser) Load(app fyne.App) {
 					copied += n
 					np.SetValue(float64(copied) / float64(nb))
 				}
+				np.Hide()
+				dialog.ShowInformation("Restoration ended", "Your device is restored with backup image : "+backupFile, b.window)
 			}()
 			np.Show()
 		}, b.window)
