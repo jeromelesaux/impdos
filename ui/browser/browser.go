@@ -153,7 +153,8 @@ func (b *Browser) importFolder(from string, node *impdos.Inode) error {
 			}
 		} else {
 			folderPath := filepath.Join(from, file.Name())
-			if err := b.imp.Partitions[node.Partition.PartitionNumber].NewFolder(folderPath, b.imp.Pointer, node); err != nil {
+			_, err := b.imp.Partitions[node.Partition.PartitionNumber].NewFolder(folderPath, b.imp.Pointer, node)
+			if err != nil {
 				return err
 			}
 			if err := b.importFolder(folderPath, node.Inodes[len(node.Inodes)-1]); err != nil {
@@ -457,16 +458,17 @@ func (b *Browser) Load(app fyne.App) {
 			}
 			root := list.Path()
 			rootName := filepath.Base(root)
-			if err := b.imp.Partitions[node.Partition.PartitionNumber].NewFolder(rootName, b.imp.Pointer, node); err != nil {
+			newInode, err := b.imp.Partitions[node.Partition.PartitionNumber].NewFolder(rootName, b.imp.Pointer, node)
+			if err != nil {
 				dialog.ShowError(err, b.window)
 				return
 			}
 
-			if err := b.importFolder(root, node); err != nil {
+			if err := b.importFolder(root, newInode); err != nil {
 				dialog.ShowError(err, b.window)
 				return
 			}
-
+			b.ReloadUI()
 		}, b.window)
 	})
 	importFileButton := widget.NewButton("Import a file to your ImpDOS DOM", func() {
@@ -492,6 +494,7 @@ func (b *Browser) Load(app fyne.App) {
 				dialog.ShowError(err, b.window)
 				return
 			}
+			b.ReloadUI()
 		}, b.window)
 	})
 	deleteNode := widget.NewButton("Delete the selected file or folder", func() {
@@ -536,7 +539,8 @@ func (b *Browser) Load(app fyne.App) {
 			"Will create a new folder on your DOM",
 			func(ok string) {
 				pn := node.Partition.PartitionNumber
-				if err := b.imp.Partitions[pn].NewFolder(ok, b.imp.Pointer, node); err != nil {
+				_, err := b.imp.Partitions[pn].NewFolder(ok, b.imp.Pointer, node)
+				if err != nil {
 					dialog.ShowError(err, b.window)
 					return
 				}

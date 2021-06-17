@@ -15,6 +15,17 @@ diskutil list external
    #:                       TYPE NAME                    SIZE       IDENTIFIER
    0:                                                   *523.8 MB   disk2
 
+   /dev/disk2 (external, physical):
+   #:                       TYPE NAME                    SIZE       IDENTIFIER
+   0:                                                   *523.8 MB   disk2
+
+/dev/disk3 (external, physical):
+   #:                       TYPE NAME                    SIZE       IDENTIFIER
+   0:      GUID_partition_scheme                        *5.0 TB     disk3
+   1:                        EFI EFI                     209.7 MB   disk3s1
+   2:       Microsoft Basic Data Backup5To               5.0 TB     disk3s2
+
+
    for macos /dev/disk2
 
 
