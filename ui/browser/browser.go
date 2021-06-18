@@ -16,6 +16,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/jeromelesaux/impdos"
+	"github.com/jeromelesaux/impdos/ui/usb"
 )
 
 type Browser struct {
@@ -167,10 +168,19 @@ func (b *Browser) importFolder(from string, node *impdos.Inode) error {
 
 func (b *Browser) Load(app fyne.App) {
 
+	devices, err := usb.DevicesDetect()
+	if err != nil {
+		devices = []string{}
+		fmt.Printf("[UI IMPDOS] error while getting usb devices error : %v\n", err)
+	}
 	/*	tree.OnUnselected = func(id string) {
 			fmt.Printf("Tree node unselected: %s", id)
 		}
 	*/
+
+	devicesSelect := widget.NewSelect(devices, func(device string) {
+		b.LoadDom(device)
+	})
 
 	// chemin du path du device
 	b.devicePath = widget.NewEntry()
@@ -202,10 +212,11 @@ func (b *Browser) Load(app fyne.App) {
 		// here
 	})
 
-	deviceW := container.NewGridWithRows(2,
+	/*	deviceW := container.NewGridWithRows(3,
+		devicesSelect,
 		b.devicePath,
 		openDeviceButton)
-
+	*/
 	modeLabel := widget.NewLabel("Mode")
 	b.mode = widget.NewEntry()
 	modeContainer := container.NewGridWithColumns(2,
@@ -554,17 +565,26 @@ func (b *Browser) Load(app fyne.App) {
 		paperContainer,
 		inkContainer,
 	)
-	cmdContainer := container.NewGridWithRows(10,
-		deviceW,
+	autoexecPanel := container.NewGridWithRows(5,
+		devicesSelect,
+		b.devicePath,
+		openDeviceButton,
 		autoexecInfo,
 		autoexecButton,
+	)
+	actionsContainer := container.NewGridWithRows(7,
 		backupButton,
 		restoreButton,
 		extractButton,
 		importFolderButton,
 		importFileButton,
 		deleteNode,
-		createFolder)
+		createFolder,
+	)
+	cmdContainer := container.NewGridWithRows(2,
+		autoexecPanel,
+		actionsContainer,
+	)
 
 	b.treeViewGrid = container.NewGridWithColumns(2,
 		b.treeView,
