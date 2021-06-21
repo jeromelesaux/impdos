@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/jeromelesaux/m4client/cpc"
 )
 
 var (
@@ -439,6 +441,39 @@ func (i *Inode) ClusterOffset() int {
 	} else {
 		return (((int(i.Cluster)-2)*4)+0x221)*0x200 + int(i.PartitionOffset)
 	}
+}
+
+func (i *Inode) GetFile(f *os.File) ([]byte, error) {
+	content, err := i.Get(f)
+	if err != nil {
+		return content, err
+	}
+	header, err := cpc.BytesCpcHeader(content)
+	if err != nil {
+		return content, err
+	}
+	headerFilename := AmsdosFilename(header.Filename[:])
+	domFilename := i.GetName()
+	if headerFilename != domFilename {
+		// no header on DOM so ascii file
+		return content, err
+	}
+	for j := 0; j < len(header.NotUsed); j++ {
+		header.NotUsed[j] = 0
+	}
+	for j := 0; j < len(header.NotUsed2); j++ {
+		header.NotUsed2[j] = 0
+	}
+	// copier le nouvel entete dans le buffer content
+	header.Size2 = header.LogicalSize
+	header.Checksum = header.ComputedChecksum16()
+
+	newHeader, err := header.Bytes()
+	if err != nil {
+		return content, err
+	}
+	copy(content[0:], newHeader)
+	return content, err
 }
 
 func (i *Inode) Get(f *os.File) ([]byte, error) {

@@ -19,6 +19,10 @@ import (
 	"github.com/jeromelesaux/impdos/ui/usb"
 )
 
+var (
+	backupFileFilter = storage.NewExtensionFileFilter([]string{".img", ".ibc"})
+)
+
 type Browser struct {
 	imp          *impdos.Impdos
 	treeData     map[string][]string
@@ -104,7 +108,7 @@ func (b *Browser) LoadDom(device string) {
 }
 
 func (b *Browser) extractFile(dest string, node *impdos.Inode) error {
-	content, err := node.Get(b.imp.Pointer)
+	content, err := node.GetFile(b.imp.Pointer)
 	if err != nil {
 		return err
 	}
@@ -206,7 +210,7 @@ func (b *Browser) Load(app fyne.App) {
 			filename := reader.URI().Path()
 			b.LoadDom(filename)
 		}, b.window)
-		fd.SetFilter(storage.NewExtensionFileFilter([]string{".img", ".ibc"}))
+		fd.SetFilter(backupFileFilter)
 		fd.Resize(fyne.NewSize(1000, 800))
 		fd.Show()
 		// here
@@ -385,6 +389,7 @@ func (b *Browser) Load(app fyne.App) {
 				np.Hide()
 				dialog.ShowInformation("Restoration ended", "Your device is restored with backup image : "+backupFile, b.window)
 			}()
+
 			np.Show()
 		}, b.window)
 	})
@@ -430,7 +435,7 @@ func (b *Browser) Load(app fyne.App) {
 					return
 				}
 				dest := writer.URI().Path()
-				content, err := node.Get(b.imp.Pointer)
+				content, err := node.GetFile(b.imp.Pointer)
 				if err != nil {
 					dialog.ShowError(err, b.window)
 					return

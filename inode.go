@@ -122,6 +122,32 @@ func (in *Inode) GetName() string {
 	return s
 }
 
+func AmsdosFilename(b []byte) string {
+	var s string
+	for i := 0; i < len(b); i++ {
+		var c byte = 32
+
+		if b[i] >= 48 && b[i] <= 57 {
+			c = b[i]
+		}
+		if b[i] >= 65 && b[i] <= 90 {
+			c = b[i]
+		}
+		if b[i] >= 97 && b[i] <= 122 {
+			c = b[i]
+		}
+		if b[i] == 46 {
+			c = b[i]
+		}
+		if i == 7 {
+			c = '.'
+		}
+		s += string(c)
+	}
+
+	return s
+}
+
 func (i *Inode) Save(f *os.File) error {
 	if err := binary.Write(f, binary.BigEndian, i.Name); err != nil {
 		return err
@@ -162,6 +188,9 @@ func (i *Inode) Read(f *os.File) error {
 	}
 	i.Size = binary.LittleEndian.Uint32(size)
 
+	if !i.IsDir() {
+		i.Size += 0x80
+	}
 	return nil
 }
 
