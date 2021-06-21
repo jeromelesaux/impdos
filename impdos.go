@@ -423,6 +423,9 @@ func Read(device string) (*Impdos, error) {
 	if nbOctets != int64(ParitionSize) {
 		nbPartition := nbOctets / int64(ParitionSize)
 		fmt.Printf("[IMPDOS] found %d partition\n", nbPartition)
+		if nbPartition == 0 {
+			return imp, errors.New("no ImpDOS partition found")
+		}
 		for i := 0; i < int(nbPartition); i++ {
 			imp.Partitions = append(imp.Partitions, NewPartition(i))
 		}
