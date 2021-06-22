@@ -21,6 +21,7 @@ import (
 
 var (
 	backupFileFilter = storage.NewExtensionFileFilter([]string{".img", ".ibc"})
+	ibcFileFilter    = storage.NewExtensionFileFilter([]string{".ibc"})
 )
 
 type Browser struct {
@@ -275,7 +276,8 @@ func (b *Browser) Load(app fyne.App) {
 			dialog.ShowError(errors.New("no device selected"), b.window)
 			return
 		}
-		dialog.ShowFileSave(func(writer fyne.URIWriteCloser, err error) {
+
+		fs := dialog.NewFileSave(func(writer fyne.URIWriteCloser, err error) {
 			if err != nil {
 				dialog.ShowError(err, b.window)
 				return
@@ -283,7 +285,9 @@ func (b *Browser) Load(app fyne.App) {
 			if writer == nil {
 				return
 			}
+
 			backupFile := writer.URI().Path()
+			os.Remove(backupFile)
 			backupFile += ".ibc"
 			np := dialog.NewProgress("backup your DOM", "Backup DOM to "+backupFile, b.window)
 			go func() {
@@ -331,6 +335,8 @@ func (b *Browser) Load(app fyne.App) {
 			np.Show()
 
 		}, b.window)
+		fs.SetFilter(ibcFileFilter)
+		fs.Show()
 	})
 	restoreButton := widget.NewButton("Restore your ImpDOS DOM", func() {
 		if b.devicePath.Text == "" {

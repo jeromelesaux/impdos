@@ -392,8 +392,8 @@ func (p *Partition) GetLastN(f *os.File) (uint16, error) {
 	if err != nil {
 		return cluster, err
 	}
-	if cluster == 0 {
-		cluster = 2
+	if cluster == 0 || cluster == 0xffff {
+		cluster = 4
 	}
 	return cluster, nil
 }
