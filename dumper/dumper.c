@@ -672,8 +672,10 @@ int main(int argc, char** argv)
 				
 				// ok now I can write or read data from device.
 				if (read == 1) {
+					prinft("Get the DOM content.\n");
 					read_mass_storage(device,0x81,0x02,imageFile);
 				} else {
+					prinft("Burn the DOM.\n");
 					write_mass_storage(device,0x81,0x02,imageFile);
 				}
 				printf("Process ended.\n");
