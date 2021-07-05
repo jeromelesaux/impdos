@@ -10,6 +10,7 @@
 
 libusb_device *impdos_device = NULL;
 int BUFFERSIZE =  64;
+int DEBUG = 0;
 #define INQUIRY_LENGTH                0x24
 #define READ_CAPACITY_LENGTH          0x08
 // Mass Storage Requests values. See section 3 of the Bulk-Only Mass Storage Class specifications
@@ -71,11 +72,11 @@ struct command_block_wrapper {
 
 static void usage() {
 	printf("Dumper usage : \n");
-	printf(">	dumper read|write impdos_image.ibc\n");
+	printf("#>	dumper read|write impdos_image.ibc\n");
 	printf(" for dumping data from usb device to image :\n");
-	printf(">	dumper read my_impdos_image.ibc\n");
+	printf("#>	dumper read my_impdos_image.ibc\n");
 	printf(" for dumping data from image disk to usb device :\n");
-	printf(">	dumper write my_impdos_image.ibc\n");
+	printf("#>	dumper write my_impdos_image.ibc\n");
 	exit(-1);
 }
 
@@ -133,7 +134,9 @@ int setupDevice(libusb_device_handle *device) {
 	int status = libusb_claim_interface(device, 0);
 	if (status != LIBUSB_SUCCESS) {
 		libusb_close(device);
-		printf("libusb_claim_interface failed: %s\n", libusb_error_name(status));
+		if (DEBUG==1) {
+			printf("libusb_claim_interface failed: %s\n", libusb_error_name(status));
+		}
 		return -1;
 	}
 	return 0;
@@ -192,7 +195,9 @@ static int send_mass_storage_command(libusb_device_handle *handle, uint8_t endpo
 		return -1;
 	}
 
-	printf("   sent %d CDB bytes\n", cdb_len);
+	if (DEBUG==1) {
+		printf("   sent %d CDB bytes\n", cdb_len);
+	}
 	return 0;
 }
 static uint8_t* u32_to_u8(const uint32_t u32, uint8_t* u8) {
@@ -272,7 +277,9 @@ static int get_mass_storage_status(libusb_device_handle *handle, uint8_t endpoin
 		return -1;
 	}
 	// For this test, we ignore the dCSWSignature check for validity...
-	printf("   Mass Storage Status: %02X (%s)\n", csw.bCSWStatus, csw.bCSWStatus?"FAILED":"Success");
+	if (DEBUG==1) {
+		printf("   Mass Storage Status: %02X (%s)\n", csw.bCSWStatus, csw.bCSWStatus?"FAILED":"Success");
+	}
 	if (csw.dCSWTag != expected_tag)
 		return -1;
 	if (csw.bCSWStatus) {
@@ -300,7 +307,9 @@ static void get_sense(libusb_device_handle *handle, uint8_t endpoint_in, uint8_t
 	int rc;
 
 	// Request Sense
-	printf("Request Sense:\n");
+	if (DEBUG==1) {
+		printf("Request Sense:\n");
+	}
 	memset(sense, 0, sizeof(sense));
 	memset(cdb, 0, sizeof(cdb));
 	cdb[0] = 0x03;	// Request Sense
@@ -313,8 +322,9 @@ static void get_sense(libusb_device_handle *handle, uint8_t endpoint_in, uint8_t
 		printf("libusb_bulk_transfer failed: %s\n", libusb_error_name(rc));
 		return;
 	}
-	printf("   received %d bytes\n", size);
-
+	if (DEBUG==1) {
+		printf("   received %d bytes\n", size);
+	}
 	if ((sense[0] != 0x70) && (sense[0] != 0x71)) {
 		perr("   ERROR No sense data\n");
 	} else {
@@ -340,6 +350,141 @@ static int read_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 	uint8_t buffer[64];
 	char vid[9], pid[9], rev[5];
 	unsigned char *data;
+	if (DEBUG==1) {
+		printf("Reading Max LUN:\n");
+	}
+	r = libusb_control_transfer(handle, LIBUSB_ENDPOINT_IN|LIBUSB_REQUEST_TYPE_CLASS|LIBUSB_RECIPIENT_INTERFACE,
+		BOMS_GET_MAX_LUN, 0, 0, &lun, 1, 1000);
+	// Some devices send a STALL instead of the actual value.
+	// In such cases we should set lun to 0.
+	if (r == 0) {
+		lun = 0;
+	} else if (r < 0) {
+		perr("   Failed: %s", libusb_strerror((enum libusb_error)r));
+	}
+	if (DEBUG==1) {
+		printf("   Max LUN = %d\n", lun);
+	}
+	// Send Inquiry
+	if (DEBUG==1) {
+		printf("Sending Inquiry:\n");
+	}
+	memset(buffer, 0, sizeof(buffer));
+	memset(cdb, 0, sizeof(cdb));
+	cdb[0] = 0x12;	// Inquiry
+	cdb[4] = INQUIRY_LENGTH;
+
+	send_mass_storage_command(handle, endpoint_out, lun, cdb, LIBUSB_ENDPOINT_IN, INQUIRY_LENGTH, &expected_tag);
+	CALL_CHECK(libusb_bulk_transfer(handle, endpoint_in, (unsigned char*)&buffer, INQUIRY_LENGTH, &size, 1000));
+	if (DEBUG==1) {
+		printf("   received %d bytes\n", size);
+	}
+	// The following strings are not zero terminated
+	for (i=0; i<8; i++) {
+		vid[i] = buffer[8+i];
+		pid[i] = buffer[16+i];
+		rev[i/2] = buffer[32+i/2];	// instead of another loop
+	}
+	vid[8] = 0;
+	pid[8] = 0;
+	rev[4] = 0;
+	if (DEBUG==1) {
+		printf("   VID:PID:REV \"%8s\":\"%8s\":\"%4s\"\n", vid, pid, rev);
+	}
+	if (get_mass_storage_status(handle, endpoint_in, expected_tag) == -2) {
+		get_sense(handle, endpoint_in, endpoint_out);
+	}
+
+	// Read capacity
+	if (DEBUG==1) {
+		printf("Reading Capacity:\n");
+	}
+	memset(buffer, 0, sizeof(buffer));
+	memset(cdb, 0, sizeof(cdb));
+	cdb[0] = 0x25;	// Read Capacity
+
+	send_mass_storage_command(handle, endpoint_out, lun, cdb, LIBUSB_ENDPOINT_IN, READ_CAPACITY_LENGTH, &expected_tag);
+	CALL_CHECK(libusb_bulk_transfer(handle, endpoint_in, (unsigned char*)&buffer, READ_CAPACITY_LENGTH, &size, 1000));
+	if (DEBUG==1) {
+		printf("   received %d bytes\n", size);
+	}
+	max_lba = be_to_int32(&buffer[0]);
+	block_size = be_to_int32(&buffer[4]);
+	device_size = ((double)(max_lba+1))*block_size/(1024*1024*1024);
+	if (DEBUG==1) {
+		printf("   Max LBA: %08X, Block Size: %08X (%.2f GB)\n", max_lba, block_size, device_size);
+	}
+	if (get_mass_storage_status(handle, endpoint_in, expected_tag) == -2) {
+		get_sense(handle, endpoint_in, endpoint_out);
+	}
+
+	
+	// Send Read
+	if (DEBUG==1) {
+		printf("Attempting to read %u bytes:\n", block_size);
+	}
+	// coverity[tainted_data]
+	data = (unsigned char*) calloc(1, block_size);
+	if (data == NULL) {
+		perr("   unable to allocate data buffer\n");
+		return -1;
+	}
+	
+	uint32_t nb_iter = max_lba+1;
+	uint8_t *block_number;
+	block_number = calloc(4,sizeof(uint8_t));
+	if (DEBUG==1) {
+		printf("   NB iterations :%d, device size:%f, block_size:%08X\n",nb_iter,device_size,block_size);
+	}
+	for (i=0; i < nb_iter ; i++){ 
+		memset(block_number,0,sizeof(block_number));
+		block_number = u32_to_u8(i,block_number);
+
+		memset(cdb, 0, sizeof(cdb));
+		cdb[0] = 0x28;	// Read(10)
+		cdb[2] = block_number[0]; // block number
+		cdb[3] = block_number[1]; // 
+		cdb[4] = block_number[2]; // 
+		cdb[5] = block_number[3]; // 
+		cdb[8] = 0x1;	// number of block to read 
+
+		send_mass_storage_command(handle, endpoint_out, lun, cdb, LIBUSB_ENDPOINT_IN, block_size, &expected_tag);
+		libusb_bulk_transfer(handle, endpoint_in, data, block_size, &size, 1000);
+		usleep(200);
+		if (DEBUG==1) {
+			printf("   READ: received %d bytes from block :%.2X,:%.2X,:%.2X,:%.2X\n", size, cdb[2], cdb[3], cdb[4], cdb[5]);
+		}
+		if (get_mass_storage_status(handle, endpoint_in, expected_tag) == -2) {
+			get_sense(handle, endpoint_in, endpoint_out);
+		} else {
+			if (DEBUG==1) {
+				display_buffer_hex(data, size);
+			}
+			if (fwrite(data, 1, (size_t)size, f) != (unsigned int)size) {
+				perr("   unable to write binary data\n");
+			}
+			fflush(f);
+		}
+		memset(data, 0, sizeof(data));
+	}
+	
+	free(block_number);
+	free(data);
+	return 0;
+}
+
+// Mass Storage device to test bulk transfers (non destructive test)
+static int write_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, uint8_t endpoint_out, FILE *f)
+{
+	int r, size;
+	uint8_t lun;
+	uint32_t expected_tag;
+	uint32_t i, max_lba, block_size;
+	double device_size;
+	uint8_t cdb[16];	// SCSI Command Descriptor Block
+	uint8_t buffer[64];
+	char vid[9], pid[9], rev[5];
+	unsigned char *data;
 
 	printf("Reading Max LUN:\n");
 	r = libusb_control_transfer(handle, LIBUSB_ENDPOINT_IN|LIBUSB_REQUEST_TYPE_CLASS|LIBUSB_RECIPIENT_INTERFACE,
@@ -351,10 +496,14 @@ static int read_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 	} else if (r < 0) {
 		perr("   Failed: %s", libusb_strerror((enum libusb_error)r));
 	}
-	printf("   Max LUN = %d\n", lun);
+	if (DEBUG==1) {
+		printf("   Max LUN = %d\n", lun);
+	}
 
 	// Send Inquiry
-	printf("Sending Inquiry:\n");
+	if (DEBUG==1) {
+		printf("Sending Inquiry:\n");
+	}
 	memset(buffer, 0, sizeof(buffer));
 	memset(cdb, 0, sizeof(cdb));
 	cdb[0] = 0x12;	// Inquiry
@@ -362,7 +511,9 @@ static int read_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 
 	send_mass_storage_command(handle, endpoint_out, lun, cdb, LIBUSB_ENDPOINT_IN, INQUIRY_LENGTH, &expected_tag);
 	CALL_CHECK(libusb_bulk_transfer(handle, endpoint_in, (unsigned char*)&buffer, INQUIRY_LENGTH, &size, 1000));
-	printf("   received %d bytes\n", size);
+	if (DEBUG==1) {
+		printf("   received %d bytes\n", size);
+	}
 	// The following strings are not zero terminated
 	for (i=0; i<8; i++) {
 		vid[i] = buffer[8+i];
@@ -372,31 +523,41 @@ static int read_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 	vid[8] = 0;
 	pid[8] = 0;
 	rev[4] = 0;
-	printf("   VID:PID:REV \"%8s\":\"%8s\":\"%4s\"\n", vid, pid, rev);
+	if (DEBUG==1) {
+		printf("   VID:PID:REV \"%8s\":\"%8s\":\"%4s\"\n", vid, pid, rev);
+	}
 	if (get_mass_storage_status(handle, endpoint_in, expected_tag) == -2) {
 		get_sense(handle, endpoint_in, endpoint_out);
 	}
 
 	// Read capacity
-	printf("Reading Capacity:\n");
+	if (DEBUG==1) {
+		printf("Reading Capacity:\n");
+	}
 	memset(buffer, 0, sizeof(buffer));
 	memset(cdb, 0, sizeof(cdb));
 	cdb[0] = 0x25;	// Read Capacity
 
 	send_mass_storage_command(handle, endpoint_out, lun, cdb, LIBUSB_ENDPOINT_IN, READ_CAPACITY_LENGTH, &expected_tag);
 	CALL_CHECK(libusb_bulk_transfer(handle, endpoint_in, (unsigned char*)&buffer, READ_CAPACITY_LENGTH, &size, 1000));
-	printf("   received %d bytes\n", size);
+	if (DEBUG==1) {
+		printf("   received %d bytes\n", size);
+	}
 	max_lba = be_to_int32(&buffer[0]);
 	block_size = be_to_int32(&buffer[4]);
 	device_size = ((double)(max_lba+1))*block_size/(1024*1024*1024);
-	printf("   Max LBA: %08X, Block Size: %08X (%.2f GB)\n", max_lba, block_size, device_size);
+	if (DEBUG==1) {
+		printf("   Max LBA: %08X, Block Size: %08X (%.2f GB)\n", max_lba, block_size, device_size);
+	}
 	if (get_mass_storage_status(handle, endpoint_in, expected_tag) == -2) {
 		get_sense(handle, endpoint_in, endpoint_out);
 	}
 
 	
 	// Send Read
-	printf("Attempting to read %u bytes:\n", block_size);
+	if (DEBUG==1) {
+		printf("Attempt	ing to read %u bytes:\n", block_size);
+	}
 	// coverity[tainted_data]
 	data = (unsigned char*) calloc(1, block_size);
 	if (data == NULL) {
@@ -407,24 +568,27 @@ static int read_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 	uint32_t nb_iter = max_lba+1;
 	uint8_t *block_number;
 	block_number = calloc(4,sizeof(uint8_t));
-	printf("   NB iterations :%d, device size:%f, block_size:%08X\n",nb_iter,device_size,block_size);
+	if (DEBUG==1) {
+		printf("   NB iterations :%d, device size:%f, block_size:%08X\n",nb_iter,device_size,block_size);
+	}
 	for (i=0; i < nb_iter ; i++){ 
 		memset(block_number,0,sizeof(block_number));
 		block_number = u32_to_u8(i,block_number);
 
 		memset(cdb, 0, sizeof(cdb));
-		cdb[0] = 0x28;	// Read(10)
-		cdb[2] = block_number[3]; // block number
-		cdb[3] = block_number[2]; // 
-		cdb[4] = block_number[1]; // 
-		cdb[5] = block_number[0]; // 
+		cdb[0] = 0x2A;	// Read(10)
+		cdb[2] = block_number[0]; // block number
+		cdb[3] = block_number[1]; // 
+		cdb[4] = block_number[2]; // 
+		cdb[5] = block_number[3]; // 
 		cdb[8] = 0x1;	// number of block to read 
 
 		send_mass_storage_command(handle, endpoint_out, lun, cdb, LIBUSB_ENDPOINT_IN, block_size, &expected_tag);
 		libusb_bulk_transfer(handle, endpoint_in, data, block_size, &size, 1000);
-
-		printf("   READ: received %d bytes from block :%.2X,:%.2X,:%.2X,:%.2X\n", size, cdb[2], cdb[3], cdb[4], cdb[5]);
-		
+		usleep(200);
+		if (DEBUG==1) {
+			printf("   READ: received %d bytes from block :%.2X,:%.2X,:%.2X,:%.2X\n", size, cdb[2], cdb[3], cdb[4], cdb[5]);
+		}
 		if (get_mass_storage_status(handle, endpoint_in, expected_tag) == -2) {
 			get_sense(handle, endpoint_in, endpoint_out);
 		} else {
@@ -444,7 +608,6 @@ static int read_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 
 
 
-
 int main(int argc, char** argv)
 {
 	
@@ -456,7 +619,7 @@ int main(int argc, char** argv)
 	//libusb_context *usbContext = NULL;
 	void (*func_ptr)(libusb_device_handle *,FILE *) = NULL;
 
-	if (argc != 3) {
+	if (argc < 3 ) {
 		usage();
 	}
 	printf("Image file %s action %s\n",argv[2],argv[1]);
@@ -476,6 +639,11 @@ int main(int argc, char** argv)
 			exit(-1);
 		}
 		read = 0;
+	}
+	if (argc == 4) {
+		if (strcmp(argv[3],"debug")==0) {
+			DEBUG = 1;
+		}
 	}
 	
 	r = libusb_init(NULL);
@@ -501,13 +669,14 @@ int main(int argc, char** argv)
 			int status = setupDevice(device);
 			if (status==0) {
 			
-				read_mass_storage(device,0x81,0x02,imageFile);
+				
 				// ok now I can write or read data from device.
-			/*	if (read == 1) {
-					readData(device,imageFile);
+				if (read == 1) {
+					read_mass_storage(device,0x81,0x02,imageFile);
 				} else {
-					writeData(device,imageFile);
-				}*/
+					write_mass_storage(device,0x81,0x02,imageFile);
+				}
+				printf("Process ended.\n");
 			} else {
 				printf("Error while setting up the configuration. %s\n",libusb_error_name( status ));
 			}
