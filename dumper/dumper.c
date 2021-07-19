@@ -7,7 +7,8 @@
 #include "libusb.h"
 //gcc dumper.c -o dumper `pkg-config --cflags --libs --static libusb-1.0`
 //gcc dumper.c -o impdumper.exe -I"C:\msys64\clang64\include\libusb-1.0" -L"C:\msys64\clang64\lib" -l"usb-1.0" 
-
+//gcc dumper.c -o impdumper.exe -I"C:\msys64\clang64\include\libusb-1.0" -L"C:\msys64\clang64\lib"  C:\msys64\clang64\lib\libusb-1.0.dll.a -static
+//x86_64-w64-mingw32-gcc dumper.c -o impdumper.exe -I/Users/jeromelesaux/Downloads/libusb-1.0.24-src/out/include/libusb-1.0 -L/Users/jeromelesaux/Downloads/libusb-1.0.24-src/out/lib -lusb-1.0
 libusb_device *impdos_device = NULL;
 int BUFFERSIZE =  64;
 int DEBUG = 0;

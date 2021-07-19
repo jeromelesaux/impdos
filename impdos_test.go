@@ -1,6 +1,7 @@
 package impdos
 
 import (
+	"encoding/binary"
 	"fmt"
 	"testing"
 )
@@ -104,7 +105,7 @@ func TestCopyFileInDom(t *testing.T) {
 }
 
 func TestCopyFileAndCreateFolderInDom(t *testing.T) {
-	device := "/Users/jeromelesaux/Downloads/impdos_copy_dump.img"
+	device := "/Users/jeromelesaux/Downloads/impdos_newfolder.img"
 	imp, err := Read(device)
 	if err != nil {
 		t.Fatalf("%v\n", err)
@@ -126,12 +127,26 @@ func TestCopyFileAndCreateFolderInDom(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := imp.Partitions[0].NewFolder("TEST", imp.Pointer, imp.Partitions[0].Inode); err != nil {
+	if _, err := imp.Partitions[0].NewFolder("TEST", imp.Pointer, imp.Partitions[0].Inode); err != nil {
 		t.Fatal(err)
 	}
 
-	testInode := imp.Partitions[0].Inode.findInode([]byte("TEST"))
+	testInode := imp.Partitions[0].Inode.FindInode([]byte("TEST"))
 	if err := imp.Partitions[0].Save("/Users/jeromelesaux/Documents/Projets/go/src/github.com/jeromelesaux/impdos/ironman.scr", imp.Pointer, testInode); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func Test24bits(t *testing.T) {
+	var size uint32 = 0x8000
+
+	b := make([]byte, 4)
+	b[1] = 0x80
+	size2 := binary.LittleEndian.Uint32(b)
+	if size2 != size {
+		t.Fatal()
+	}
+	b2 := make([]byte, 4)
+	binary.LittleEndian.PutUint32(b2, size2)
+	t.Log("")
 }
