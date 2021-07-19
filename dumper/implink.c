@@ -430,14 +430,15 @@ static int read_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 		perr("   unable to allocate data buffer\n");
 		return -1;
 	}
-	
-	uint32_t nb_iter = max_lba+1;
+	uint32_t nb_iter = (size_expected / block_size)+1;
+    uint32_t start_iter = (start_address / block_size);
+
 	uint8_t *block_number;
 	block_number = calloc(4,sizeof(uint8_t));
 	if (DEBUG==1) {
 		fprintf(stderr,"   NB iterations :%d, device size:%f, block_size:%08X\n",nb_iter,device_size,block_size);
 	}
-	for (i=0; i < nb_iter ; i++){ 
+	for (i=start_iter; i < nb_iter ; i++){ 
 		memset(block_number,0,sizeof(block_number));
 		block_number = u32_to_u8(i,block_number);
 
@@ -650,13 +651,14 @@ static int write_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in,
 		return -1;
 	}
 	
-	uint32_t nb_iter = max_lba+1;
+	uint32_t nb_iter = (size_expected / block_size)+1;
+    uint32_t start_iter = (start_address / block_size);
 	uint8_t *block_number;
 	block_number = calloc(4,sizeof(uint8_t));
 	if (DEBUG==1) {
 		fprintf(stderr,"   NB iterations :%d, device size:%f, block_size:%08X\n",nb_iter,device_size,block_size);
 	}
-	for (i=0; i < nb_iter ; i++){ 
+	for (i=start_iter; i < nb_iter ; i++){ 
 		memset(block_number,0,sizeof(block_number));
 		block_number = u32_to_u8(i,block_number);
 
@@ -773,10 +775,10 @@ int main(int argc, char** argv)
 				} else {
                     if (write) {
                         fprintf(stderr,"Burn the DOM.\n");
-                        write_mass_storage(device,0x81,0x02,output);
+                        write_mass_storage(device,0x81,0x02,output, start_address, size_expected);
                     } else {
                         if (inquiring) {
-                            inquiring_mass_storage(device,0x81,0x02, start_address, size_expected);
+                            inquiring_mass_storage(device,0x81,0x02);
                         }
                     }
 				}
