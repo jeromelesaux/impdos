@@ -36,6 +36,7 @@ type Browser struct {
 	window       fyne.Window
 	treeViewGrid *fyne.Container
 	uuidSelected string
+	directAccess bool
 }
 
 func (b *Browser) updateUi() {
@@ -216,6 +217,11 @@ func (b *Browser) Load(app fyne.App) {
 		fd.Show()
 		// here
 	})
+
+	directAccess := widget.NewCheck("Direct DOM access.",
+		func(v bool) {
+			b.directAccess = v
+		})
 
 	/*	deviceW := container.NewGridWithRows(3,
 		devicesSelect,
@@ -576,10 +582,11 @@ func (b *Browser) Load(app fyne.App) {
 		paperContainer,
 		inkContainer,
 	)
-	autoexecPanel := container.NewGridWithRows(5,
+	autoexecPanel := container.NewGridWithRows(6,
 		devicesSelect,
 		b.devicePath,
 		openDeviceButton,
+		directAccess,
 		autoexecInfo,
 		autoexecButton,
 	)

@@ -34,12 +34,21 @@ var (
 type Partition struct {
 	Inode           *Inode
 	PartitionNumber int
+	DirectAccessDom bool
 }
 
 type Impdos struct {
-	CheckTag   []byte
-	Partitions []*Partition
-	Pointer    *os.File
+	CheckTag        []byte
+	Partitions      []*Partition
+	Pointer         *os.File
+	DirectAccessDom bool
+}
+
+func (i *Impdos) SetDirectAccessDom(v bool) {
+	i.DirectAccessDom = v
+	for index := range i.Partitions {
+		i.Partitions[index].DirectAccessDom = v
+	}
 }
 
 func EmptyName() []byte {
@@ -153,7 +162,7 @@ func (p *Partition) ReadRootCatalogue(f *os.File) error {
 	}
 	inode := NewInode(p.PartitionOffset(), nil, p)
 	inode.IsRoot = true
-	if err := inode.ReadCatalogue(f); err != nil {
+	if err := inode.ReadCatalogue(f, offset); err != nil {
 		return err
 	}
 	p.Inode = InitInode(p.PartitionOffset(), nil, p, 2, 0, DirectoryType, []byte{})
@@ -195,12 +204,20 @@ func (a *AutoExec) String() string {
 }
 
 func (imp *Impdos) Check() (bool, error) {
-	_, err := imp.Pointer.Seek(0, io.SeekStart)
-	if err != nil {
-		return false, err
-	}
-	if err := binary.Read(imp.Pointer, binary.LittleEndian, imp.CheckTag); err != nil {
-		return false, err
+	if imp.DirectAccessDom {
+		var err error
+		imp.CheckTag, err = readDomWin(0, int64(len(imp.CheckTag)))
+		if err != nil {
+			return false, err
+		}
+	} else {
+		_, err := imp.Pointer.Seek(0, io.SeekStart)
+		if err != nil {
+			return false, err
+		}
+		if err := binary.Read(imp.Pointer, binary.LittleEndian, imp.CheckTag); err != nil {
+			return false, err
+		}
 	}
 	if string(imp.CheckTag) != "iMPdos" {
 		return false, nil
@@ -210,12 +227,20 @@ func (imp *Impdos) Check() (bool, error) {
 
 func (imp *Impdos) ReadAutoExec() (*AutoExec, error) {
 	a := &AutoExec{}
-	_, err := imp.Pointer.Seek(0x400, io.SeekStart)
-	if err != nil {
-		return a, err
-	}
-	if err := binary.Read(imp.Pointer, binary.LittleEndian, a); err != nil {
-		return a, err
+	if imp.DirectAccessDom {
+		var err error
+		imp.CheckTag, err = readDomWin(0x400, 5)
+		if err != nil {
+			return a, err
+		}
+	} else {
+		_, err := imp.Pointer.Seek(0x400, io.SeekStart)
+		if err != nil {
+			return a, err
+		}
+		if err := binary.Read(imp.Pointer, binary.LittleEndian, a); err != nil {
+			return a, err
+		}
 	}
 	if a.End != 0xff {
 		return a, ErrorBadEnd
@@ -280,12 +305,14 @@ func (p *Partition) SaveInodeEntry(fp *os.File, folder *Inode, entry *Inode) err
 	if err != nil {
 		return err
 	}
+	off := int64(catalogueOffset)
 	// loop to find a new empty entry
 	for {
 		inode := NewInode(entry.PartitionOffset, nil, p)
-		if err := inode.Read(fp); err != nil {
+		if err := inode.Read(fp, off); err != nil {
 			return err
 		}
+		off += 32
 		if inode.Cluster == entry.Cluster {
 			break
 		}
@@ -320,12 +347,14 @@ func (p *Partition) SaveInode(fp *os.File, folder *Inode, newInode *Inode) error
 	if err != nil {
 		return err
 	}
+	off := int64(catalogueOffset)
 	// loop to find a new empty entry
 	for {
 		inode := NewInode(folder.PartitionOffset, nil, p)
-		if err := inode.Read(fp); err != nil {
+		if err := inode.Read(fp, off); err != nil {
 			return err
 		}
+		off += 32 // size of the catalogue entry
 		if inode.IsEnd() {
 			break
 		}
@@ -351,25 +380,36 @@ func (p *Partition) GetNextN(f *os.File) (uint16, error) {
 	if err != nil {
 		return n, err
 	}
-	offset, err := f.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return n, err
-	}
-	partitionOffset := p.PartitionOffset()
-	_, err = f.Seek(partitionOffset+0x203, io.SeekStart)
-	if err != nil {
-		return n, err
-	}
 	b := make([]byte, 4)
-	if err := binary.Read(f, binary.LittleEndian, &b); err != nil {
-		return n, err
+	partitionOffset := p.PartitionOffset()
+	if p.DirectAccessDom {
+		var err error
+		b, err = readDomWin(partitionOffset+0x203, int64(len(b)))
+		if err != nil {
+			return n, err
+		}
+	} else {
+		offset, err := f.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return n, err
+		}
+
+		_, err = f.Seek(partitionOffset+0x203, io.SeekStart)
+		if err != nil {
+			return n, err
+		}
+
+		if err := binary.Read(f, binary.LittleEndian, &b); err != nil {
+			return n, err
+		}
+		_, err = f.Seek(offset, io.SeekStart)
+		if err != nil {
+			return n, err
+		}
 	}
 	size := binary.LittleEndian.Uint32(b)
 	diff := size / 0x200
-	_, err = f.Seek(offset, io.SeekStart)
-	if err != nil {
-		return n, err
-	}
+
 	return n + uint16(diff) + 1, nil
 }
 
@@ -377,20 +417,31 @@ func (p *Partition) GetLastN(f *os.File) (uint16, error) {
 	partitionOffset := p.PartitionOffset()
 	sector1 := partitionOffset + 0x201
 	var cluster uint16
-	offset, err := f.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return cluster, err
-	}
-	_, err = f.Seek(sector1, io.SeekStart)
-	if err != nil {
-		return cluster, err
-	}
-	if err := binary.Read(f, binary.LittleEndian, &cluster); err != nil {
-		return cluster, err
-	}
-	_, err = f.Seek(offset, io.SeekStart)
-	if err != nil {
-		return cluster, err
+	if p.DirectAccessDom {
+		var err error
+		var buf []byte
+		buf, err = readDomWin(sector1, 2)
+
+		if err != nil {
+			return cluster, err
+		}
+		cluster = binary.LittleEndian.Uint16(buf)
+	} else {
+		offset, err := f.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return cluster, err
+		}
+		_, err = f.Seek(sector1, io.SeekStart)
+		if err != nil {
+			return cluster, err
+		}
+		if err := binary.Read(f, binary.LittleEndian, &cluster); err != nil {
+			return cluster, err
+		}
+		_, err = f.Seek(offset, io.SeekStart)
+		if err != nil {
+			return cluster, err
+		}
 	}
 	if cluster == 0 || cluster == 0xffff {
 		cluster = 4
@@ -574,13 +625,15 @@ func (p *Partition) DeleteInode(inodeToDelete *Inode, folder *Inode, fp *os.File
 	if err != nil {
 		return err
 	}
+	off := int64(catalogueOffset)
 
 	// loop to find a new empty entry
 	for {
 		inode := NewInode(folder.PartitionOffset, nil, p)
-		if err := inode.Read(fp); err != nil {
+		if err := inode.Read(fp, off); err != nil {
 			return err
 		}
+		off += 32
 		if inode.Cluster == inodeToDelete.Cluster && inode.Size == inodeToDelete.Size {
 			break
 		}

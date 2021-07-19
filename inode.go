@@ -169,22 +169,51 @@ func (i *Inode) Save(f *os.File) error {
 	return nil
 }
 
-func (i *Inode) Read(f *os.File) error {
-	if err := binary.Read(f, binary.BigEndian, i.Name); err != nil {
-		return err
-	}
-	if err := binary.Read(f, binary.BigEndian, &i.Type); err != nil {
-		return err
-	}
-	if err := binary.Read(f, binary.BigEndian, i.Unused); err != nil {
-		return err
-	}
-	if err := binary.Read(f, binary.LittleEndian, &i.Cluster); err != nil {
-		return err
-	}
+func (i *Inode) Read(f *os.File, offset int64) error {
 	size := make([]byte, 4)
-	if err := binary.Read(f, binary.LittleEndian, size); err != nil {
-		return err
+	if i.Partition.DirectAccessDom {
+		var err error
+		var b []byte
+		i.Name, err = readDomWin(offset, int64(len(i.Name)))
+		if err != nil {
+			return err
+		}
+		offset += int64(len(i.Name))
+		b, err = readDomWin(offset, 1)
+		if err != nil {
+			return err
+		}
+		i.Type = b[0]
+		b, err = readDomWin(offset, int64(len(i.Unused)))
+		if err != nil {
+			return err
+		}
+		b, err = readDomWin(offset, 2)
+		if err != nil {
+			return err
+		}
+		i.Cluster = binary.LittleEndian.Uint16(b)
+		size, err = readDomWin(offset, 4)
+		if err != nil {
+			return err
+		}
+	} else {
+		if err := binary.Read(f, binary.BigEndian, i.Name); err != nil {
+			return err
+		}
+		if err := binary.Read(f, binary.BigEndian, &i.Type); err != nil {
+			return err
+		}
+		if err := binary.Read(f, binary.BigEndian, i.Unused); err != nil {
+			return err
+		}
+		if err := binary.Read(f, binary.LittleEndian, &i.Cluster); err != nil {
+			return err
+		}
+
+		if err := binary.Read(f, binary.LittleEndian, size); err != nil {
+			return err
+		}
 	}
 	i.Size = binary.LittleEndian.Uint32(size)
 
@@ -194,23 +223,26 @@ func (i *Inode) Read(f *os.File) error {
 	return nil
 }
 
-func (i *Inode) ReadCatalogue(f *os.File) error {
+func (i *Inode) ReadCatalogue(f *os.File, off int64) error {
+
 	for {
 		inode := NewInode(i.PartitionOffset, i, i.Partition)
-		if err := inode.Read(f); err != nil {
+		if err := inode.Read(f, off); err != nil {
 			return err
 		}
+		off += 32
 		if inode.IsEnd() {
 			break
 		}
 		if inode.Type == DirectoryType && inode.Name[0] != '.' && inode.Name[1] != '.' {
 			if isPrint(inode.Name) {
+
 				offset, err := f.Seek(0, io.SeekCurrent)
 				if err != nil {
 					return err
 				}
 				nextCatalogueOffset := inode.ClusterOffset()
-
+				nextOff := int64(nextCatalogueOffset)
 				fmt.Printf("Name:%s Offset :%x next catalogue offset :%x\n",
 					string(inode.Name),
 					offset,
@@ -219,7 +251,7 @@ func (i *Inode) ReadCatalogue(f *os.File) error {
 				if err != nil {
 					return err
 				}
-				if err = inode.ReadCatalogue(f); err != nil {
+				if err = inode.ReadCatalogue(f, nextOff); err != nil {
 					return err
 				}
 				_, err = f.Seek(int64(offset), io.SeekStart) // return to initial offset
