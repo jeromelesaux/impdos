@@ -65,7 +65,7 @@ func (b *Browser) ReloadUI() {
 
 func (b *Browser) LoadDom(device string) {
 	var err error
-	b.imp, err = impdos.Read(device)
+	b.imp, err = impdos.Read(device, b.directAccess)
 	if err != nil {
 		fmt.Printf("[LOADING] error :%v\n", err)
 		dialog.ShowError(err, b.window)
@@ -193,7 +193,7 @@ func (b *Browser) Load(app fyne.App) {
 	b.devicePath.SetText("")
 	b.devicePath.OnSubmitted = func(v string) {
 		var err error
-		b.imp, err = impdos.Read(v)
+		b.imp, err = impdos.Read(v, b.directAccess)
 		if err != nil {
 			fmt.Printf("[DEVICE LOADING] cannot load device error : %v\n", err)
 			return

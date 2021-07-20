@@ -148,52 +148,81 @@ func AmsdosFilename(b []byte) string {
 	return s
 }
 
-func (i *Inode) Save(f *os.File) error {
-	if err := binary.Write(f, binary.BigEndian, i.Name); err != nil {
-		return err
-	}
-	if err := binary.Write(f, binary.BigEndian, &i.Type); err != nil {
-		return err
-	}
-	if err := binary.Write(f, binary.BigEndian, i.Unused); err != nil {
-		return err
-	}
-	if err := binary.Write(f, binary.LittleEndian, &i.Cluster); err != nil {
-		return err
-	}
-	size := make([]byte, 4)
-	binary.LittleEndian.PutUint32(size, i.Size)
-	if err := binary.Write(f, binary.LittleEndian, size); err != nil {
-		return err
+func (i *Inode) Save(f *os.File, offset *int64) error {
+	if i.Partition.DirectAccessDom {
+		if err := writeDomWin(*offset, int64(len(i.Name)), i.Name); err != nil {
+			return err
+		}
+		*offset += int64(len(i.Name))
+		b := make([]byte, 1)
+		b[0] = i.Type
+		if err := writeDomWin(*offset, 1, b); err != nil {
+			return err
+		}
+		*offset++
+		if err := writeDomWin(*offset, int64(len(i.Unused)), i.Name); err != nil {
+			return err
+		}
+		*offset += int64(len(i.Unused))
+		b = make([]byte, 2)
+
+		binary.LittleEndian.PutUint16(b, i.Cluster)
+		if err := writeDomWin(*offset, 2, b); err != nil {
+			return err
+		}
+		*offset += 2
+		size := make([]byte, 4)
+		binary.LittleEndian.PutUint32(size, i.Size)
+		if err := writeDomWin(*offset, 4, size); err != nil {
+			return err
+		}
+	} else {
+		if err := binary.Write(f, binary.BigEndian, i.Name); err != nil {
+			return err
+		}
+		if err := binary.Write(f, binary.BigEndian, &i.Type); err != nil {
+			return err
+		}
+		if err := binary.Write(f, binary.BigEndian, i.Unused); err != nil {
+			return err
+		}
+		if err := binary.Write(f, binary.LittleEndian, &i.Cluster); err != nil {
+			return err
+		}
+		size := make([]byte, 4)
+		binary.LittleEndian.PutUint32(size, i.Size)
+		if err := binary.Write(f, binary.LittleEndian, size); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func (i *Inode) Read(f *os.File, offset int64) error {
+func (i *Inode) Read(f *os.File, offset *int64) error {
 	size := make([]byte, 4)
 	if i.Partition.DirectAccessDom {
 		var err error
 		var b []byte
-		i.Name, err = readDomWin(offset, int64(len(i.Name)))
+		i.Name, err = readDomWin(*offset, int64(len(i.Name)))
 		if err != nil {
 			return err
 		}
-		offset += int64(len(i.Name))
-		b, err = readDomWin(offset, 1)
+		*offset += int64(len(i.Name))
+		b, err = readDomWin(*offset, 1)
 		if err != nil {
 			return err
 		}
 		i.Type = b[0]
-		b, err = readDomWin(offset, int64(len(i.Unused)))
+		_, err = readDomWin(*offset, int64(len(i.Unused)))
 		if err != nil {
 			return err
 		}
-		b, err = readDomWin(offset, 2)
+		b, err = readDomWin(*offset, 2)
 		if err != nil {
 			return err
 		}
 		i.Cluster = binary.LittleEndian.Uint16(b)
-		size, err = readDomWin(offset, 4)
+		size, err = readDomWin(*offset, 4)
 		if err != nil {
 			return err
 		}
@@ -223,23 +252,26 @@ func (i *Inode) Read(f *os.File, offset int64) error {
 	return nil
 }
 
-func (i *Inode) ReadCatalogue(f *os.File, off int64) error {
+func (i *Inode) ReadCatalogue(f *os.File, off *int64) error {
 
 	for {
 		inode := NewInode(i.PartitionOffset, i, i.Partition)
 		if err := inode.Read(f, off); err != nil {
 			return err
 		}
-		off += 32
+		*off += 32
 		if inode.IsEnd() {
 			break
 		}
 		if inode.Type == DirectoryType && inode.Name[0] != '.' && inode.Name[1] != '.' {
 			if isPrint(inode.Name) {
-
-				offset, err := f.Seek(0, io.SeekCurrent)
-				if err != nil {
-					return err
+				var offset int64 = 0
+				if !inode.Partition.DirectAccessDom {
+					var err error
+					offset, err = f.Seek(0, io.SeekCurrent)
+					if err != nil {
+						return err
+					}
 				}
 				nextCatalogueOffset := inode.ClusterOffset()
 				nextOff := int64(nextCatalogueOffset)
@@ -247,16 +279,20 @@ func (i *Inode) ReadCatalogue(f *os.File, off int64) error {
 					string(inode.Name),
 					offset,
 					nextCatalogueOffset)
-				_, err = f.Seek(int64(nextCatalogueOffset), io.SeekStart)
-				if err != nil {
+				if !inode.Partition.DirectAccessDom {
+					_, err := f.Seek(int64(nextCatalogueOffset), io.SeekStart)
+					if err != nil {
+						return err
+					}
+				}
+				if err := inode.ReadCatalogue(f, &nextOff); err != nil {
 					return err
 				}
-				if err = inode.ReadCatalogue(f, nextOff); err != nil {
-					return err
-				}
-				_, err = f.Seek(int64(offset), io.SeekStart) // return to initial offset
-				if err != nil {
-					return err
+				if !inode.Partition.DirectAccessDom {
+					_, err := f.Seek(int64(offset), io.SeekStart) // return to initial offset
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}

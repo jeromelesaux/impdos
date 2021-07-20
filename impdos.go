@@ -156,13 +156,15 @@ func (p *Partition) PartitionOffset() int64 {
 func (p *Partition) ReadRootCatalogue(f *os.File) error {
 
 	var offset int64 = p.PartitionOffset() + 0x40200
-	_, err := f.Seek(offset, io.SeekStart)
-	if err != nil {
-		return err
+	if !p.DirectAccessDom {
+		_, err := f.Seek(offset, io.SeekStart)
+		if err != nil {
+			return err
+		}
 	}
 	inode := NewInode(p.PartitionOffset(), nil, p)
 	inode.IsRoot = true
-	if err := inode.ReadCatalogue(f, offset); err != nil {
+	if err := inode.ReadCatalogue(f, &offset); err != nil {
 		return err
 	}
 	p.Inode = InitInode(p.PartitionOffset(), nil, p, 2, 0, DirectoryType, []byte{})
@@ -229,7 +231,7 @@ func (imp *Impdos) ReadAutoExec() (*AutoExec, error) {
 	a := &AutoExec{}
 	if imp.DirectAccessDom {
 		var err error
-		imp.CheckTag, err = readDomWin(0x400, 5)
+		imp.CheckTag, err = readDomWin(0x400, 6)
 		if err != nil {
 			return a, err
 		}
@@ -271,45 +273,63 @@ func (imp *Impdos) SaveAutoexec(a *AutoExec) error {
 func (p *Partition) SaveN(f *os.File, cluster uint16, size uint32) error {
 	partitionOffset := p.PartitionOffset()
 	sector1 := partitionOffset + 0x201
+	if p.DirectAccessDom {
+		b := make([]byte, 2)
+		binary.LittleEndian.PutUint16(b, cluster)
+		if err := writeDomWin(sector1, 2, b); err != nil {
+			return err
+		}
+		sector1 += 2
+		b = make([]byte, 4)
+		binary.LittleEndian.PutUint32(b, size)
+		if err := writeDomWin(sector1, 4, b); err != nil {
+			return err
+		}
+	} else {
+		offset, err := f.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return err
+		}
+		_, err = f.Seek(sector1, io.SeekStart)
+		if err != nil {
+			return err
+		}
 
-	offset, err := f.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return err
-	}
-	_, err = f.Seek(sector1, io.SeekStart)
-	if err != nil {
-		return err
-	}
-
-	if err := binary.Write(f, binary.LittleEndian, &cluster); err != nil {
-		return err
-	}
-	if err := binary.Write(f, binary.LittleEndian, &size); err != nil {
-		return err
-	}
-	_, err = f.Seek(offset, io.SeekStart)
-	if err != nil {
-		return err
+		if err := binary.Write(f, binary.LittleEndian, &cluster); err != nil {
+			return err
+		}
+		if err := binary.Write(f, binary.LittleEndian, &size); err != nil {
+			return err
+		}
+		_, err = f.Seek(offset, io.SeekStart)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func (p *Partition) SaveInodeEntry(fp *os.File, folder *Inode, entry *Inode) error {
-	offset, err := fp.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return err
-	}
-
 	catalogueOffset := folder.ClusterOffset()
-	_, err = fp.Seek(int64(catalogueOffset), io.SeekStart)
-	if err != nil {
-		return err
-	}
 	off := int64(catalogueOffset)
+	var offset int64
+
+	if !p.DirectAccessDom {
+		var err error
+		offset, err = fp.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return err
+		}
+
+		_, err = fp.Seek(int64(catalogueOffset), io.SeekStart)
+		if err != nil {
+			return err
+		}
+	}
 	// loop to find a new empty entry
 	for {
 		inode := NewInode(entry.PartitionOffset, nil, p)
-		if err := inode.Read(fp, off); err != nil {
+		if err := inode.Read(fp, &off); err != nil {
 			return err
 		}
 		off += 32
@@ -322,11 +342,16 @@ func (p *Partition) SaveInodeEntry(fp *os.File, folder *Inode, entry *Inode) err
 	}
 
 	// go to the start of the inode entry position in dom
-	_, err = fp.Seek(-32, io.SeekCurrent)
-	if err != nil {
-		return err
+	var err error
+	if p.DirectAccessDom {
+		off -= 32
+	} else {
+		_, err = fp.Seek(-32, io.SeekCurrent)
+		if err != nil {
+			return err
+		}
 	}
-	if err := entry.Save(fp); err != nil {
+	if err := entry.Save(fp, &off); err != nil {
 		return err
 	}
 	_, err = fp.Seek(int64(offset), io.SeekStart) // return to initial offset
@@ -337,21 +362,25 @@ func (p *Partition) SaveInodeEntry(fp *os.File, folder *Inode, entry *Inode) err
 }
 
 func (p *Partition) SaveInode(fp *os.File, folder *Inode, newInode *Inode) error {
-	offset, err := fp.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return err
+	var offset int64
+	var err error
+	catalogueOffset := folder.ClusterOffset()
+	off := int64(catalogueOffset)
+	if !p.DirectAccessDom {
+		offset, err = fp.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return err
+		}
+		_, err = fp.Seek(int64(catalogueOffset), io.SeekStart)
+		if err != nil {
+			return err
+		}
 	}
 
-	catalogueOffset := folder.ClusterOffset()
-	_, err = fp.Seek(int64(catalogueOffset), io.SeekStart)
-	if err != nil {
-		return err
-	}
-	off := int64(catalogueOffset)
 	// loop to find a new empty entry
 	for {
 		inode := NewInode(folder.PartitionOffset, nil, p)
-		if err := inode.Read(fp, off); err != nil {
+		if err := inode.Read(fp, &off); err != nil {
 			return err
 		}
 		off += 32 // size of the catalogue entry
@@ -361,16 +390,23 @@ func (p *Partition) SaveInode(fp *os.File, folder *Inode, newInode *Inode) error
 	}
 
 	// go to the start of the inode entry position in dom
-	_, err = fp.Seek(-32, io.SeekCurrent)
-	if err != nil {
+	if p.DirectAccessDom {
+		off -= 32
+	} else {
+		_, err = fp.Seek(-32, io.SeekCurrent)
+		if err != nil {
+			return err
+		}
+	}
+	if err := newInode.Save(fp, &off); err != nil {
 		return err
 	}
-	if err := newInode.Save(fp); err != nil {
-		return err
-	}
-	_, err = fp.Seek(int64(offset), io.SeekStart) // return to initial offset
-	if err != nil {
-		return err
+
+	if !p.DirectAccessDom {
+		_, err = fp.Seek(int64(offset), io.SeekStart) // return to initial offset
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -457,20 +493,26 @@ func NewPartition(number int) *Partition {
 	return p
 }
 
-func Read(device string) (*Impdos, error) {
+func Read(device string, directAccess bool) (*Impdos, error) {
 	var err error
+	var nbOctets int64
 	imp := NewImpdos()
-	imp.Pointer, err = os.OpenFile(device, os.O_RDWR, os.ModePerm)
-	if err != nil {
-		return imp, err
-	}
-	_, err = imp.Pointer.Seek(0, io.SeekStart)
-	if err != nil {
-		return imp, err
-	}
-	nbOctets, err := imp.Pointer.Seek(0, io.SeekEnd)
-	if err != nil {
-		return imp, err
+	imp.SetDirectAccessDom(directAccess)
+	if imp.DirectAccessDom {
+		// inquiring dom
+	} else {
+		imp.Pointer, err = os.OpenFile(device, os.O_RDWR, os.ModePerm)
+		if err != nil {
+			return imp, err
+		}
+		_, err = imp.Pointer.Seek(0, io.SeekStart)
+		if err != nil {
+			return imp, err
+		}
+		nbOctets, err = imp.Pointer.Seek(0, io.SeekEnd)
+		if err != nil {
+			return imp, err
+		}
 	}
 	fmt.Printf("[IMPDOS] Nb Octets read :%d\n", nbOctets)
 	if nbOctets != int64(ParitionSize) {
@@ -528,75 +570,83 @@ func (i *Inode) GetFile(f *os.File) ([]byte, error) {
 }
 
 func (i *Inode) Get(f *os.File) ([]byte, error) {
-
+	var offset int64
+	var err error
 	b := make([]byte, i.Size)
 
 	if i.IsDir() {
 		return b, errors.New("inode is directory can not be get")
 	}
-
-	offset, err := f.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return b, err
-	}
 	nextCatalogueOffset := i.ClusterOffset()
-
-	/*	fmt.Printf("Name:%s Offset :%x next catalogue offset :%x\n",
-		string(inode.Name),
-		offset,
-		nextCatalogueOffset)*/
-	_, err = f.Seek(int64(nextCatalogueOffset), io.SeekStart)
-	if err != nil {
+	if i.Partition.DirectAccessDom {
+		b, err := readDomWin(int64(nextCatalogueOffset), int64(len(b)))
 		return b, err
-	}
+	} else {
+		offset, err = f.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return b, err
+		}
 
-	read, err := f.Read(b)
-	if err != nil {
-		return b, err
-	}
-	if read != len(b) {
-		return b, errors.New("read bytes differs from size inode")
-	}
+		/*	fmt.Printf("Name:%s Offset :%x next catalogue offset :%x\n",
+			string(inode.Name),
+			offset,
+			nextCatalogueOffset)*/
+		_, err = f.Seek(int64(nextCatalogueOffset), io.SeekStart)
+		if err != nil {
+			return b, err
+		}
 
-	_, err = f.Seek(int64(offset), io.SeekStart) // return to initial offset
-	if err != nil {
-		return b, err
+		read, err := f.Read(b)
+		if err != nil {
+			return b, err
+		}
+		if read != len(b) {
+			return b, errors.New("read bytes differs from size inode")
+		}
+
+		_, err = f.Seek(int64(offset), io.SeekStart) // return to initial offset
+		if err != nil {
+			return b, err
+		}
 	}
 	return b, nil
 }
 
 func (i *Inode) Put(f *os.File, data []byte) error {
-
+	nextCatalogueOffset := i.ClusterOffset()
 	if i.IsDir() {
 		return errors.New("inode is directory can not be get")
 	}
-
-	offset, err := f.Seek(0, io.SeekCurrent)
-	if err != nil {
+	if i.Partition.DirectAccessDom {
+		err := writeDomWin(int64(nextCatalogueOffset), int64(len(data)), data)
 		return err
-	}
-	nextCatalogueOffset := i.ClusterOffset()
+	} else {
+		offset, err := f.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return err
+		}
 
-	/*	fmt.Printf("Name:%s Offset :%x next catalogue offset :%x\n",
-		string(inode.Name),
-		offset,
-		nextCatalogueOffset)*/
-	_, err = f.Seek(int64(nextCatalogueOffset), io.SeekStart)
-	if err != nil {
-		return err
-	}
+		/*	fmt.Printf("Name:%s Offset :%x next catalogue offset :%x\n",
+			string(inode.Name),
+			offset,
+			nextCatalogueOffset)*/
+		_, err = f.Seek(int64(nextCatalogueOffset), io.SeekStart)
+		if err != nil {
+			return err
+		}
 
-	read, err := f.Write(data)
-	if err != nil {
-		return err
-	}
-	if read != len(data) {
-		return errors.New("read bytes differs from size inode")
-	}
+		read, err := f.Write(data)
+		if err != nil {
+			return err
+		}
+		if read != len(data) {
+			return errors.New("read bytes differs from size inode")
+		}
 
-	_, err = f.Seek(int64(offset), io.SeekStart) // return to initial offset
-	if err != nil {
-		return err
+		_, err = f.Seek(int64(offset), io.SeekStart) // return to initial offset
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -614,23 +664,28 @@ func isPrint(v []byte) bool {
 }
 
 func (p *Partition) DeleteInode(inodeToDelete *Inode, folder *Inode, fp *os.File) error {
-	inodeToDelete.Delete()
-	offset, err := fp.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return err
-	}
-
+	var offset int64
 	catalogueOffset := folder.ClusterOffset()
-	_, err = fp.Seek(int64(catalogueOffset), io.SeekStart)
-	if err != nil {
-		return err
-	}
 	off := int64(catalogueOffset)
+	inodeToDelete.Delete()
+
+	if !p.DirectAccessDom {
+		var err error
+		offset, err = fp.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return err
+		}
+
+		_, err = fp.Seek(int64(catalogueOffset), io.SeekStart)
+		if err != nil {
+			return err
+		}
+	}
 
 	// loop to find a new empty entry
 	for {
 		inode := NewInode(folder.PartitionOffset, nil, p)
-		if err := inode.Read(fp, off); err != nil {
+		if err := inode.Read(fp, &off); err != nil {
 			return err
 		}
 		off += 32
@@ -640,45 +695,59 @@ func (p *Partition) DeleteInode(inodeToDelete *Inode, folder *Inode, fp *os.File
 	}
 
 	// go to the start of the inode entry position in dom
-	_, err = fp.Seek(-32, io.SeekCurrent)
-	if err != nil {
-		return err
+	if p.DirectAccessDom {
+		off -= 32
+	} else {
+		var err error
+		_, err = fp.Seek(-32, io.SeekCurrent)
+		if err != nil {
+			return err
+		}
 	}
 	// apply on dom the deleted inode
-	if err := inodeToDelete.Save(fp); err != nil {
+	if err := inodeToDelete.Save(fp, &off); err != nil {
 		return err
 	}
 
-	_, err = fp.Seek(int64(offset), io.SeekStart) // return to initial offset
-	if err != nil {
-		return err
+	if !p.DirectAccessDom {
+		var err error
+		_, err = fp.Seek(int64(offset), io.SeekStart) // return to initial offset
+		if err != nil {
+			return err
+		}
 	}
-
 	return nil
 }
 
 func (p *Partition) FormatCatalogue(fp *os.File, folder *Inode) error {
-
-	offset := folder.ClusterOffset()
-	orig, err := fp.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return err
-	}
-	_, err = fp.Seek(int64(offset), io.SeekStart)
-	if err != nil {
-		return err
-	}
 	b := make([]byte, (4 * 0x200))
 	for i := 0; i < (4 * 0x200); i++ {
 		b[i] = 0xff
 	}
-	err = binary.Write(fp, binary.BigEndian, &b)
-	if err != nil {
-		return err
-	}
-	_, err = fp.Seek(orig, io.SeekStart)
-	if err != nil {
-		return err
+	offset := folder.ClusterOffset()
+	if p.DirectAccessDom {
+		err := writeDomWin(int64(offset), int64(len(b)), b)
+		if err != nil {
+			return err
+		}
+	} else {
+		orig, err := fp.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return err
+		}
+		_, err = fp.Seek(int64(offset), io.SeekStart)
+		if err != nil {
+			return err
+		}
+
+		err = binary.Write(fp, binary.BigEndian, &b)
+		if err != nil {
+			return err
+		}
+		_, err = fp.Seek(orig, io.SeekStart)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
