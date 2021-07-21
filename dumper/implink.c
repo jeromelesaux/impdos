@@ -92,7 +92,7 @@ static void print_devs(libusb_device **devs)
 		struct libusb_device_descriptor desc;
 		int r = libusb_get_device_descriptor(dev, &desc);
 		if (r < 0) {
-			ffprintf(stderr,stderr, "failed to get device descriptor");
+			fprintf(stderr, "failed to get device descriptor");
 			return;
 		}
 		if (desc.idVendor == 0x152d && desc.idProduct == 0x2338) {
@@ -244,7 +244,7 @@ static void perr(char const *format, ...)
 	va_list args;
 
 	va_start (args, format);
-	vffprintf(stderr,stderr, format, args);
+	fprintf(stderr, format, args);
 	va_end(args);
 }
 
@@ -720,11 +720,11 @@ int main(int argc, char** argv)
     } else {
         if (argc == 4) { // read or write to DOM
             if (strcmp(argv[1],"read")==0) {
-                fprintf(stderr,stderr,"Will write the DOM to the image file %s\n",argv[2]);
+                fprintf(stderr,"Will write the DOM to the image file %s\n",argv[2]);
                 output = stdout; 
             } else {
                 if (strcmp(argv[1],"write")==0) {
-                    fprintf(stderr,stderr,"Will write the image %s in to the DOM\n",argv[2]);
+                    fprintf(stderr,"Will write the image %s in to the DOM\n",argv[2]);
                     output = stdin;
                     read = 0;
                 }
