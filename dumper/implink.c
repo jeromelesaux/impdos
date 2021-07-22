@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdarg.h>
+#include <unistd.h>
 
 #include "libusb.h"
 //gcc dumper.c -o dumper `pkg-config --cflags --libs --static libusb-1.0`
