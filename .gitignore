@@ -1,2 +1,5 @@
 .vscode
 *.zip
+IMPBrowser*
+dumper/*.exe
+*.exe

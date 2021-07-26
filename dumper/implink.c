@@ -73,12 +73,10 @@ struct command_block_wrapper {
 
 
 static void usage() {
-	fprintf(stderr,"Dumper usage : \n");
-	fprintf(stderr,"#>	dumper read|write impdos_image.ibc\n");
-	fprintf(stderr," for dumping data from usb device to image :\n");
-	fprintf(stderr,"#>	dumper read my_impdos_image.ibc\n");
-	fprintf(stderr," for dumping data from image disk to usb device :\n");
-	fprintf(stderr,"#>	dumper write my_impdos_image.ibc\n");
+	fprintf(stderr,"Implink.exe usage : \n");
+	fprintf(stderr,"#> Inquiring DOM :  > implink.exe inquiring\n");
+	fprintf(stderr,"#> Reading part of the DOM : > implink.exe read start_address size > out.bin\n");
+	fprintf(stderr,"#> Writing data in the DOM : > cat file.bin | implink.exe write start_address size\n");
 	exit(-1);
 }
 
