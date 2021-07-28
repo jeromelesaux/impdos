@@ -780,6 +780,7 @@ int main(int argc, char** argv)
                         write_mass_storage(device,0x81,0x02,output, start_address, size_expected);
                     } else {
                         if (inquiring) {
+							fprintf(stderr,"Inquiring the DOM.\n");
                             inquiring_mass_storage(device,0x81,0x02);
                         }
                     }
