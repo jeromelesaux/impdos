@@ -720,6 +720,17 @@ int main(int argc, char** argv)
 			inquiring = true;
 		}
     } else {
+		if (argc == 3) {
+			if (strcmp(argv[1],"inquiring")==0) {
+				output = stdout;
+				inquiring = true;
+			}
+			if (argc == 2) {
+                if (strcmp(argv[3],"debug")==0) {
+                    DEBUG = 1;
+                }
+            }
+		}
         if (argc == 4) { // read or write to DOM
             if (strcmp(argv[1],"read")==0) {
                 fprintf(stderr,"Will write the DOM to the image file %s\n",argv[2]);
