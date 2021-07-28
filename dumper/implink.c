@@ -725,11 +725,10 @@ int main(int argc, char** argv)
 				output = stdout;
 				inquiring = true;
 			}
-			if (argc == 2) {
-                if (strcmp(argv[2],"debug")==0) {
-                    DEBUG = 1;
-                }
-            }
+			
+			if (strcmp(argv[2],"debug")==0) {
+				DEBUG = 1;
+			}
 		}
         if (argc == 4) { // read or write to DOM
             if (strcmp(argv[1],"read")==0) {
