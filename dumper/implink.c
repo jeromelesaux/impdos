@@ -482,7 +482,7 @@ static int inquiring_mass_storage(libusb_device_handle *handle, uint8_t endpoint
 	uint8_t lun;
 	uint32_t expected_tag;
 	uint32_t i, max_lba, block_size;
-	double device_size;
+	uint64_t device_size;
 	uint8_t cdb[16];	// SCSI Command Descriptor Block
 	uint8_t buffer[64];
 	char vid[9], pid[9], rev[5];
@@ -546,14 +546,14 @@ static int inquiring_mass_storage(libusb_device_handle *handle, uint8_t endpoint
 	}
 	max_lba = be_to_int32(&buffer[0]);
 	block_size = be_to_int32(&buffer[4]);
-	device_size = ((double)(max_lba+1))*block_size;
+	device_size = (max_lba+1)*block_size;
 	if (DEBUG==1) {
 		fprintf(stderr,"   Max LBA: %08X, Block Size: %08X (%.2f GB)\n", max_lba, block_size, device_size);
 	}
 	if (get_mass_storage_status(handle, endpoint_in, expected_tag) == -2) {
 		get_sense(handle, endpoint_in, endpoint_out);
 	}
-    fprintf(stdout,"OK %lf %d\n",device_size,block_size);
+    fprintf(stdout,"OK %ld %d\n",device_size,block_size);
     return 0;
 }
 
