@@ -714,6 +714,7 @@ int main(int argc, char** argv)
         read DOM -> input -> read start_address size -> output -> stdout
         write DOM -> input -> write start_address size -> output -> stdin
     */
+   	fprintf(stderr,"Number of arguments %d\n",argc);
     if (argc == 2 || argc == 3 ) { // inquiring DOM
 		if (strcmp(argv[1],"inquiring")==0) {
 			output = stdout;
