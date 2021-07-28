@@ -761,7 +761,7 @@ int main(int argc, char** argv)
 
 	fprintf(stderr,"Found [%d] usb devices\n",(int)cnt);
 
-	//print_devs(devs);
+	print_devs(devs);
 
 	if (impdos_device != NULL) {
 		libusb_device_handle *device; 
