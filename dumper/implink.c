@@ -553,7 +553,7 @@ static int inquiring_mass_storage(libusb_device_handle *handle, uint8_t endpoint
 	if (get_mass_storage_status(handle, endpoint_in, expected_tag) == -2) {
 		get_sense(handle, endpoint_in, endpoint_out);
 	}
-    fprintf(stdout,"OK %ld %d\n",device_size,block_size);
+    fprintf(stdout,"OK %ld %d\n",lun,block_size);
     return 0;
 }
 
