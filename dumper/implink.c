@@ -714,22 +714,17 @@ int main(int argc, char** argv)
         read DOM -> input -> read start_address size -> output -> stdout
         write DOM -> input -> write start_address size -> output -> stdin
     */
-    if (argc == 2) { // inquiring DOM
+    if (argc == 2 || argc == 3 ) { // inquiring DOM
 		if (strcmp(argv[1],"inquiring")==0) {
 			output = stdout;
 			inquiring = true;
 		}
-    } else {
 		if (argc == 3) {
-			if (strcmp(argv[1],"inquiring")==0) {
-				output = stdout;
-				inquiring = true;
-			}
-			
 			if (strcmp(argv[2],"debug")==0) {
 				DEBUG = 1;
 			}
 		}
+    } else {
         if (argc == 4) { // read or write to DOM
             if (strcmp(argv[1],"read")==0) {
                 fprintf(stderr,"Will write the DOM to the image file %s\n",argv[2]);
