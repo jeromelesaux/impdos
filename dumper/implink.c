@@ -546,7 +546,7 @@ static int inquiring_mass_storage(libusb_device_handle *handle, uint8_t endpoint
 	}
 	max_lba = be_to_int32(&buffer[0]);
 	block_size = be_to_int32(&buffer[4]);
-	device_size = ((double)(max_lba+1))*block_size/(1024*1024*1024);
+	device_size = ((double)(max_lba+1))*block_size;
 	if (DEBUG==1) {
 		fprintf(stderr,"   Max LBA: %08X, Block Size: %08X (%.2f GB)\n", max_lba, block_size, device_size);
 	}
