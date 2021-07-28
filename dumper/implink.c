@@ -730,11 +730,12 @@ int main(int argc, char** argv)
             if (strcmp(argv[1],"read")==0) {
                 fprintf(stderr,"Will write the DOM to the image file %s\n",argv[2]);
                 output = stdout; 
+				read = true;
             } else {
                 if (strcmp(argv[1],"write")==0) {
                     fprintf(stderr,"Will write the image %s in to the DOM\n",argv[2]);
                     output = stdin;
-                    read = 0;
+					write = true;
                 }
             }
             start_address = atoi(argv[2]);
