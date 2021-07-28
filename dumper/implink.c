@@ -726,7 +726,7 @@ int main(int argc, char** argv)
 				inquiring = true;
 			}
 			if (argc == 2) {
-                if (strcmp(argv[3],"debug")==0) {
+                if (strcmp(argv[2],"debug")==0) {
                     DEBUG = 1;
                 }
             }
