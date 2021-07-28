@@ -715,7 +715,10 @@ int main(int argc, char** argv)
         write DOM -> input -> write start_address size -> output -> stdin
     */
     if (argc == 1) { // inquiring DOM
-
+		if (strcmp(argv[1],"inquiring")==0) {
+			output = stdout;
+			inquiring = true;
+		}
     } else {
         if (argc == 4) { // read or write to DOM
             if (strcmp(argv[1],"read")==0) {
