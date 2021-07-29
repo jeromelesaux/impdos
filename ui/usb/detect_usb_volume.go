@@ -67,6 +67,7 @@ func linuxDetect() (devices []string, err error) {
 	scanner.Split(bufio.ScanLines)
 	for scanner.Scan() {
 		t := scanner.Text()
+		fmt.Printf("Linux: " + t + "\n")
 		var l int = 4
 		if len(t) < 4 {
 			l = len(t)
