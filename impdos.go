@@ -501,6 +501,9 @@ func Read(device string, directAccess bool) (*Impdos, error) {
 	if imp.DirectAccessDom {
 		// inquiring dom
 		nbOctets, _, err = inquiringDomWin()
+		if err != nil {
+			return imp, err
+		}
 	} else {
 		imp.Pointer, err = os.OpenFile(device, os.O_RDWR, os.ModePerm)
 		if err != nil {
