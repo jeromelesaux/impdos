@@ -54,7 +54,7 @@ func macosDetect() (devices []string, err error) {
 }
 
 func linuxDetect() (devices []string, err error) {
-	cmd := exec.Command("fdisk", "-l")
+	cmd := exec.Command("/sbin/fdisk", "-l")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	err = cmd.Run()
