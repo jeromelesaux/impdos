@@ -13,7 +13,7 @@ func getLinkerPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Dir(ex) + "implinker.exe", nil
+	return filepath.Dir(ex) + string(filepath.Separator) + "implinker.exe", nil
 }
 
 func readDomWin(startAddress, size int64) ([]byte, error) {
