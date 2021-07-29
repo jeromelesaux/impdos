@@ -221,6 +221,9 @@ func (b *Browser) Load(app fyne.App) {
 	directAccess := widget.NewCheck("Direct DOM access.",
 		func(v bool) {
 			b.directAccess = v
+			if b.directAccess {
+				b.LoadDom("")
+			}
 		})
 
 	/*	deviceW := container.NewGridWithRows(3,
