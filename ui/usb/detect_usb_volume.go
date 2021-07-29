@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
+	"fmt"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -59,6 +60,7 @@ func linuxDetect() (devices []string, err error) {
 	cmd.Stdout = &out
 	err = cmd.Run()
 	if err != nil {
+		fmt.Printf("error while getting fdisk informations : %s\n", err)
 		return
 	}
 	scanner := bufio.NewScanner(strings.NewReader(out.String()))
