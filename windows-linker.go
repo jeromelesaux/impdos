@@ -30,7 +30,9 @@ func readDomWin(startAddress, size int64) ([]byte, error) {
 		strconv.FormatInt(size, 10))
 	cmd.Stdout = &b
 	cmd.Stderr = os.Stderr
+	fmt.Printf("[WINDOWS-LINKER] %v\n", cmd.Args)
 	err = cmd.Run()
+
 	return b.Bytes(), err
 }
 
@@ -44,6 +46,7 @@ func writeDomWin(startAddress, size int64, buf []byte) error {
 	cmd := exec.Command(exePath, "write",
 		strconv.FormatInt(startAddress, 10),
 		strconv.FormatInt(size, 10))
+	fmt.Printf("[WINDOWS-LINKER] %v\n", cmd.Args)
 	cmd.Stdin = b
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
