@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 func getLinkerPath() (string, error) {
@@ -60,6 +61,19 @@ func inquiringDomWin() (domSize, blockSize int64, err error) {
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = &b
 	err = cmd.Run()
-	fmt.Printf("output %s\n", b.String())
+	fmt.Printf("[WINDOWS-LINKER] %s\n", b.String())
+	out := strings.Split(b.String(), " ")
+	if len(out) == 3 {
+		if out[0] == "OK" {
+			domSize, err = strconv.ParseInt(out[1], 10, 64)
+			if err != nil {
+				return
+			}
+			blockSize, err = strconv.ParseInt(out[2], 10, 64)
+			if err != nil {
+				return
+			}
+		}
+	}
 	return
 }
