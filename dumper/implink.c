@@ -726,7 +726,7 @@ int main(int argc, char** argv)
 			}
 		}
     } else {
-        if (argc == 4) { // read or write to DOM
+        if (argc >= 4) { // read or write to DOM
             if (strcmp(argv[1],"read")==0) {
                 fprintf(stderr,"Will read the DOM to the image file %s\n",argv[2]);
                 output = stdout; 
