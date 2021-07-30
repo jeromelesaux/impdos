@@ -65,11 +65,13 @@ func inquiringDomWin() (domSize, blockSize int64, err error) {
 	out := strings.Split(b.String(), " ")
 	if len(out) == 3 {
 		if out[0] == "OK" {
-			domSize, err = strconv.ParseInt(out[1], 10, 64)
+			cleaned := strings.Replace(out[1], "\n", "", -1)
+			domSize, err = strconv.ParseInt(cleaned, 10, 64)
 			if err != nil {
 				return
 			}
-			blockSize, err = strconv.ParseInt(out[2], 10, 64)
+			cleaned = strings.Replace(out[2], "\n", "", -1)
+			blockSize, err = strconv.ParseInt(cleaned, 10, 64)
 			if err != nil {
 				return
 			}
