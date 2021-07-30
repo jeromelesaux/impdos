@@ -429,9 +429,9 @@ static int read_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 		perr("   unable to allocate data buffer\n");
 		return -1;
 	}
-	uint32_t nb_iter = (size_expected / block_size)+1;
+	
     uint32_t start_iter = (start_address / block_size);
-
+	uint32_t nb_iter = (size_expected / block_size)+1 + start_iter;
 	uint8_t *block_number;
 	block_number = calloc(4,sizeof(uint8_t));
 	if (DEBUG==1) {
