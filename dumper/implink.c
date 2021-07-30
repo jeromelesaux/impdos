@@ -461,8 +461,14 @@ static int read_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 			if (DEBUG==1) {
 				display_buffer_hex(data, size);
 			}
-			if (fwrite(data, 1, (size_t)size, f) != (unsigned int)size) {
-				perr("   unable to write binary data\n");
+			if (size>size_expected) {
+				if (fwrite(data, 1, (size_t)size_expected, f) != (unsigned int)size) {
+					perr("   unable to write binary data\n");
+				}
+			} else {
+				if (fwrite(data, 1, (size_t)size, f) != (unsigned int)size) {
+					perr("   unable to write binary data\n");
+				}
 			}
 			fflush(f);
 		}
