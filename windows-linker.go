@@ -2,6 +2,7 @@ package impdos
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -53,10 +54,12 @@ func inquiringDomWin() (domSize, blockSize int64, err error) {
 	if err != nil {
 		return
 	}
+	var b bytes.Buffer
 	cmd := exec.Command(exePath, "inquiring")
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
+	cmd.Stdout = &b
 	err = cmd.Run()
-
+	fmt.Printf("output %s\n", b.String())
 	return
 }
