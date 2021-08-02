@@ -688,7 +688,7 @@ int main(int argc, char** argv)
 				} else {
                     if (write) {
                         fprintf(stderr,"Burn the DOM.\n");
-                        write_mass_storage(device,0x81,0x02,output, start_address, size_expected,SCSI_WRITE10);
+                        io_mass_storage(device,0x81,0x02,output, start_address, size_expected,SCSI_WRITE10);
                     } else {
                         if (inquiring) {
 							fprintf(stderr,"Inquiring the DOM.\n");
