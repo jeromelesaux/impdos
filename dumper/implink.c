@@ -13,6 +13,8 @@
 libusb_device *impdos_device = NULL;
 int BUFFERSIZE =  64;
 int DEBUG = 0;
+uint8_t SCSI_WRITE10 =  0x2A;
+uint8_t SCSI_READ10 =  0x28;
 #define INQUIRY_LENGTH                0x24
 #define READ_CAPACITY_LENGTH          0x08
 // Mass Storage Requests values. See section 3 of the Bulk-Only Mass Storage Class specifications
@@ -339,7 +341,7 @@ static void get_sense(libusb_device_handle *handle, uint8_t endpoint_in, uint8_t
 
 
 // Mass Storage device to test bulk transfers (non destructive test)
-static int read_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, uint8_t endpoint_out, FILE *f, int start_address, int size_expected)
+static int io_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, uint8_t endpoint_out, FILE *f, int start_address, int size_expected, uint8_t action)
 {
 	int r, size;
 	uint8_t lun;
@@ -453,7 +455,7 @@ static int read_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 		block_number = u32_to_u8(i,block_number);
 
 		memset(cdb, 0, sizeof(cdb));
-		cdb[0] = 0x28;	// Read(10)
+		cdb[0] = action;	// Read(10)
 		cdb[2] = block_number[0]; // block number
 		cdb[3] = block_number[1]; // 
 		cdb[4] = block_number[2]; // 
@@ -593,139 +595,6 @@ static int inquiring_mass_storage(libusb_device_handle *handle, uint8_t endpoint
 }
 
 
-// Mass Storage device to test bulk transfers (non destructive test)
-static int write_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, uint8_t endpoint_out, FILE *f, int start_address, int size_expected)
-{
-	int r, size;
-	uint8_t lun;
-	uint32_t expected_tag;
-	uint32_t i, max_lba, block_size;
-	double device_size;
-	uint8_t cdb[16];	// SCSI Command Descriptor Block
-	uint8_t buffer[64];
-	char vid[9], pid[9], rev[5];
-	unsigned char *data;
-
-	fprintf(stderr,"Reading Max LUN:\n");
-	r = libusb_control_transfer(handle, LIBUSB_ENDPOINT_IN|LIBUSB_REQUEST_TYPE_CLASS|LIBUSB_RECIPIENT_INTERFACE,
-		BOMS_GET_MAX_LUN, 0, 0, &lun, 1, 1000);
-	// Some devices send a STALL instead of the actual value.
-	// In such cases we should set lun to 0.
-	if (r == 0) {
-		lun = 0;
-	} else if (r < 0) {
-		perr("   Failed: %s", libusb_strerror((enum libusb_error)r));
-	}
-	if (DEBUG==1) {
-		fprintf(stderr,"   Max LUN = %d\n", lun);
-	}
-
-	// Send Inquiry
-	if (DEBUG==1) {
-		fprintf(stderr,"Sending Inquiry:\n");
-	}
-	memset(buffer, 0, sizeof(buffer));
-	memset(cdb, 0, sizeof(cdb));
-	cdb[0] = 0x12;	// Inquiry
-	cdb[4] = INQUIRY_LENGTH;
-
-	send_mass_storage_command(handle, endpoint_out, lun, cdb, LIBUSB_ENDPOINT_IN, INQUIRY_LENGTH, &expected_tag);
-	CALL_CHECK(libusb_bulk_transfer(handle, endpoint_in, (unsigned char*)&buffer, INQUIRY_LENGTH, &size, 1000));
-	if (DEBUG==1) {
-		fprintf(stderr,"   received %d bytes\n", size);
-	}
-	// The following strings are not zero terminated
-	for (i=0; i<8; i++) {
-		vid[i] = buffer[8+i];
-		pid[i] = buffer[16+i];
-		rev[i/2] = buffer[32+i/2];	// instead of another loop
-	}
-	vid[8] = 0;
-	pid[8] = 0;
-	rev[4] = 0;
-	if (DEBUG==1) {
-		fprintf(stderr,"   VID:PID:REV \"%8s\":\"%8s\":\"%4s\"\n", vid, pid, rev);
-	}
-	if (get_mass_storage_status(handle, endpoint_in, expected_tag) == -2) {
-		get_sense(handle, endpoint_in, endpoint_out);
-	}
-
-	// Read capacity
-	if (DEBUG==1) {
-		fprintf(stderr,"Reading Capacity:\n");
-	}
-	memset(buffer, 0, sizeof(buffer));
-	memset(cdb, 0, sizeof(cdb));
-	cdb[0] = 0x25;	// Read Capacity
-
-	send_mass_storage_command(handle, endpoint_out, lun, cdb, LIBUSB_ENDPOINT_IN, READ_CAPACITY_LENGTH, &expected_tag);
-	CALL_CHECK(libusb_bulk_transfer(handle, endpoint_in, (unsigned char*)&buffer, READ_CAPACITY_LENGTH, &size, 1000));
-	if (DEBUG==1) {
-		fprintf(stderr,"   received %d bytes\n", size);
-	}
-	max_lba = be_to_int32(&buffer[0]);
-	block_size = be_to_int32(&buffer[4]);
-	device_size = ((double)(max_lba+1))*block_size/(1024*1024*1024);
-	if (DEBUG==1) {
-		fprintf(stderr,"   Max LBA: %08X, Block Size: %08X (%.2f GB)\n", max_lba, block_size, device_size);
-	}
-	if (get_mass_storage_status(handle, endpoint_in, expected_tag) == -2) {
-		get_sense(handle, endpoint_in, endpoint_out);
-	}
-
-	
-	// Send Read
-	if (DEBUG==1) {
-		fprintf(stderr,"Attempt	ing to read %u bytes:\n", block_size);
-	}
-	// coverity[tainted_data]
-	data = (unsigned char*) calloc(1, block_size);
-	if (data == NULL) {
-		perr("   unable to allocate data buffer\n");
-		return -1;
-	}
-	
-	uint32_t nb_iter = (size_expected / block_size)+1;
-    uint32_t start_iter = (start_address / block_size);
-	uint8_t *block_number;
-	block_number = calloc(4,sizeof(uint8_t));
-	if (DEBUG==1) {
-		fprintf(stderr,"   NB iterations :%d, device size:%f, block_size:%08X\n",nb_iter,device_size,block_size);
-	}
-	for (i=start_iter; i < nb_iter ; i++){ 
-		memset(block_number,0,sizeof(block_number));
-		block_number = u32_to_u8(i,block_number);
-
-		memset(cdb, 0, sizeof(cdb));
-		cdb[0] = 0x2A;	// Read(10)
-		cdb[2] = block_number[0]; // block number
-		cdb[3] = block_number[1]; // 
-		cdb[4] = block_number[2]; // 
-		cdb[5] = block_number[3]; // 
-		cdb[8] = 0x1;	// number of block to read 
-
-		send_mass_storage_command(handle, endpoint_out, lun, cdb, LIBUSB_ENDPOINT_IN, block_size, &expected_tag);
-		libusb_bulk_transfer(handle, endpoint_in, data, block_size, &size, 1000);
-		usleep(200);
-		if (DEBUG==1) {
-			fprintf(stderr,"   READ: received %d bytes from block :%.2X,:%.2X,:%.2X,:%.2X\n", size, cdb[2], cdb[3], cdb[4], cdb[5]);
-		}
-		if (get_mass_storage_status(handle, endpoint_in, expected_tag) == -2) {
-			get_sense(handle, endpoint_in, endpoint_out);
-		} else {
-			display_buffer_hex(data, size);
-			if (fwrite(data, 1, (size_t)size, f) != (unsigned int)size) {
-				perr("   unable to write binary data\n");
-			}
-			fflush(f);
-		}
-		memset(data, 0, sizeof(data));
-	}
-	
-	free(block_number);
-	free(data);
-	return 0;
-}
 
 
 
@@ -815,11 +684,11 @@ int main(int argc, char** argv)
 
 				if (read) {
 					fprintf(stderr,"Get the DOM content.\n");
-					read_mass_storage(device,0x81,0x02,output, start_address, size_expected);
+					io_mass_storage(device,0x81,0x02,output, start_address, size_expected,SCSI_READ10);
 				} else {
                     if (write) {
                         fprintf(stderr,"Burn the DOM.\n");
-                        write_mass_storage(device,0x81,0x02,output, start_address, size_expected);
+                        write_mass_storage(device,0x81,0x02,output, start_address, size_expected,SCSI_WRITE10);
                     } else {
                         if (inquiring) {
 							fprintf(stderr,"Inquiring the DOM.\n");

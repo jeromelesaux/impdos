@@ -176,6 +176,7 @@ func (i *Inode) Save(f *os.File, offset *int64) error {
 		if err := writeDomWin(*offset, 4, size); err != nil {
 			return err
 		}
+		*offset += int64(len(size))
 	} else {
 		if err := binary.Write(f, binary.BigEndian, i.Name); err != nil {
 			return err
