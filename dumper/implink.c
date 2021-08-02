@@ -429,15 +429,25 @@ static int read_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 		perr("   unable to allocate data buffer\n");
 		return -1;
 	}
-	
-    uint32_t start_iter = (start_address / block_size);
-	uint32_t nb_iter = (size_expected / block_size)+1 + start_iter;
+	bool start_zero = true;
+	uint32_t start_offset = 0;
+	if (size_expected%block_size != 0) { // commence à un multiple de block_size ?
+		start_zero = false;
+		if (block_size > size_expected) {
+			start_offset = start_address;
+		} else {
+			start_offset = size_expected % block_size;
+		}
+	}
+    uint32_t start_block = (start_address / block_size);
+	uint32_t nb_iter = (size_expected / block_size)+1 + start_block;
+	uint32_t size_copied = 0;
 	uint8_t *block_number;
 	block_number = calloc(4,sizeof(uint8_t));
 	if (DEBUG==1) {
 		fprintf(stderr,"   NB iterations :%d, device size:%f, block_size:%08X\n",nb_iter,device_size,block_size);
 	}
-	for (i=start_iter; i < nb_iter ; i++){ 
+	for (i=start_block; i < nb_iter ; i++){ 
 		memset(block_number,0,sizeof(block_number));
 		block_number = u32_to_u8(i,block_number);
 
@@ -461,13 +471,31 @@ static int read_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 			if (DEBUG==1) {
 				display_buffer_hex(data, size);
 			}
-			if (size>size_expected) {
-				if (fwrite(data, 1, (size_t)size_expected, f) != (unsigned int)size_expected) {
-					perr("   unable to write binary data\n");
+			if (!start_zero) { // si pas multiple de block_size
+				if (size_expected <block_size) { // si taille demandée < block_size
+					if (fwrite(data[start_offset], 1, (size_t)size_expected, f) != (unsigned int)size_expected) {
+						perr("   unable to write binary data\n");
+					}
+					size_copied += size_expected;
+				} else {
+					uint32_t s = size - start_offset;
+					if (fwrite(data[start_offset], 1, (size_t)s, f) != (unsigned int)s) {
+						perr("   unable to write binary data\n");
+					}
 				}
+				start_zero = true;
 			} else {
-				if (fwrite(data, 1, (size_t)size, f) != (unsigned int)size) {
-					perr("   unable to write binary data\n");
+				if ((size_expected - size_copied) < block_size) {
+					uint32_t s = size_expected - size_copied;
+					if (fwrite(data, 1, (size_t)s, f) != (unsigned int)s) {
+						perr("   unable to write binary data\n");
+					}
+					size_copied += s;
+				} else {
+					if (fwrite(data, 1, (size_t)size, f) != (unsigned int)size) {
+						perr("   unable to write binary data\n");
+					}
+					size_copied += size;
 				}
 			}
 			fflush(f);

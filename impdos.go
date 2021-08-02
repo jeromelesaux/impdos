@@ -1,6 +1,7 @@
 package impdos
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -231,8 +232,13 @@ func (imp *Impdos) ReadAutoExec() (*AutoExec, error) {
 	a := &AutoExec{}
 	if imp.DirectAccessDom {
 		var err error
-		imp.CheckTag, err = readDomWin(0x400, 6)
+		var b []byte
+		b, err = readDomWin(0x400, 6)
 		if err != nil {
+			return a, err
+		}
+		buf := bytes.NewBuffer(b)
+		if err := binary.Read(buf, binary.LittleEndian, a); err != nil {
 			return a, err
 		}
 	} else {
@@ -528,6 +534,9 @@ func Read(device string, directAccess bool) (*Impdos, error) {
 		for i := 0; i < int(nbPartition); i++ {
 			imp.Partitions = append(imp.Partitions, NewPartition(i))
 		}
+	}
+	if imp.DirectAccessDom {
+		imp.SetDirectAccessDom(true)
 	}
 	return imp, err
 }
