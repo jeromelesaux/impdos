@@ -214,6 +214,7 @@ func (i *Inode) Read(f *os.File, offset *int64) error {
 		}
 		*offset++
 		i.Type = b[0]
+		*offset += int64(len(i.Unused))
 		b, err = readDomWin(*offset, 2)
 		if err != nil {
 			return err
