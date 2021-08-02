@@ -221,9 +221,6 @@ func (i *Inode) Read(f *os.File, offset *int64) error {
 		if err != nil {
 			return err
 		}
-		b32 := make([]byte, 4)
-		b32[0] = b[0]
-		b32[1] = b[1]
 		i.Cluster = binary.LittleEndian.Uint16(b)
 		size, err = readDomWin(*offset, 4)
 		if err != nil {

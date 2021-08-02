@@ -20,6 +20,7 @@ func getLinkerPath() (string, error) {
 
 func readDomWin(startAddress, size int64) ([]byte, error) {
 	var b bytes.Buffer
+	out := make([]byte, size)
 	exePath, err := getLinkerPath()
 	if err != nil {
 		return b.Bytes(), err
@@ -32,8 +33,8 @@ func readDomWin(startAddress, size int64) ([]byte, error) {
 	cmd.Stderr = os.Stderr
 	fmt.Printf("[WINDOWS-LINKER] %v\n", cmd.Args)
 	err = cmd.Run()
-
-	return b.Bytes(), err
+	copy(out, b.Bytes())
+	return out, err
 }
 
 func writeDomWin(startAddress, size int64, buf []byte) error {
