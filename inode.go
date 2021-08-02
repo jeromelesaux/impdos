@@ -212,20 +212,19 @@ func (i *Inode) Read(f *os.File, offset *int64) error {
 		if err != nil {
 			return err
 		}
+		*offset++
 		i.Type = b[0]
-		_, err = readDomWin(*offset, int64(len(i.Unused)))
-		if err != nil {
-			return err
-		}
 		b, err = readDomWin(*offset, 2)
 		if err != nil {
 			return err
 		}
+		*offset += 2
 		i.Cluster = binary.LittleEndian.Uint16(b)
 		size, err = readDomWin(*offset, 4)
 		if err != nil {
 			return err
 		}
+		*offset += int64(len(size))
 	} else {
 		if err := binary.Read(f, binary.BigEndian, i.Name); err != nil {
 			return err
