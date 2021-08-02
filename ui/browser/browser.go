@@ -16,7 +16,6 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/jeromelesaux/impdos"
-	"github.com/jeromelesaux/impdos/ui/usb"
 )
 
 var (
@@ -174,19 +173,10 @@ func (b *Browser) importFolder(from string, node *impdos.Inode) error {
 
 func (b *Browser) Load(app fyne.App) {
 
-	devices, err := usb.DevicesDetect()
-	if err != nil {
-		devices = []string{}
-		fmt.Printf("[UI IMPDOS] error while getting usb devices error : %v\n", err)
-	}
 	/*	tree.OnUnselected = func(id string) {
 			fmt.Printf("Tree node unselected: %s", id)
 		}
 	*/
-
-	devicesSelect := widget.NewSelect(devices, func(device string) {
-		b.LoadDom(device)
-	})
 
 	// chemin du path du device
 	b.devicePath = widget.NewEntry()
@@ -223,6 +213,9 @@ func (b *Browser) Load(app fyne.App) {
 			b.directAccess = v
 			if b.directAccess {
 				b.LoadDom("")
+				b.devicePath.SetText("[DIRECT USB ACCESS]")
+			} else {
+				b.devicePath.SetText("")
 			}
 		})
 
@@ -585,8 +578,7 @@ func (b *Browser) Load(app fyne.App) {
 		paperContainer,
 		inkContainer,
 	)
-	autoexecPanel := container.NewGridWithRows(6,
-		devicesSelect,
+	autoexecPanel := container.NewGridWithRows(5,
 		b.devicePath,
 		openDeviceButton,
 		directAccess,
