@@ -434,9 +434,9 @@ static int read_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 	if (size_expected%block_size != 0) { // commence à un multiple de block_size ?
 		start_zero = false;
 		if (block_size > size_expected) {
-			start_offset = start_address;
-		} else {
 			start_offset = size_expected % block_size;
+		} else {
+			start_offset = start_address;
 		}
 	}
     uint32_t start_block = (start_address / block_size);
