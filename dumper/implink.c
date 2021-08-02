@@ -447,7 +447,7 @@ static int read_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 	if (DEBUG==1) {
 		fprintf(stderr,"   NB iterations :%d, device size:%f, block_size:%08X\n",nb_iter,device_size,block_size);
 	}
-	printf("start_block:%d, nb_iter:%d, start_offset:%d\n",start_block, nb_iter,start_offset);
+	
 	for (i=start_block; i < nb_iter ; i++){ 
 		memset(block_number,0,sizeof(block_number));
 		block_number = u32_to_u8(i,block_number);
