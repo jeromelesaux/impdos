@@ -447,6 +447,7 @@ static int read_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 	if (DEBUG==1) {
 		fprintf(stderr,"   NB iterations :%d, device size:%f, block_size:%08X\n",nb_iter,device_size,block_size);
 	}
+	printf("start_block:%d, nb_iter:%d, start_offset:%d\n",start_block, nb_iter,start_offset);
 	for (i=start_block; i < nb_iter ; i++){ 
 		memset(block_number,0,sizeof(block_number));
 		block_number = u32_to_u8(i,block_number);
@@ -473,13 +474,13 @@ static int read_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 			}
 			if (!start_zero) { // si pas multiple de block_size
 				if (size_expected <block_size) { // si taille demandée < block_size
-					if (fwrite(data[start_offset], 1, (size_t)size_expected, f) != (unsigned int)size_expected) {
+					if (fwrite(data+start_offset, 1, (size_t)size_expected, f) != (unsigned int)size_expected) {
 						perr("   unable to write binary data\n");
 					}
 					size_copied += size_expected;
 				} else {
 					uint32_t s = size - start_offset;
-					if (fwrite(data[start_offset], 1, (size_t)s, f) != (unsigned int)s) {
+					if (fwrite(data+start_offset, 1, (size_t)s, f) != (unsigned int)s) {
 						perr("   unable to write binary data\n");
 					}
 				}
