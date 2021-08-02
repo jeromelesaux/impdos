@@ -3,3 +3,4 @@
 IMPBrowser*
 dumper/*.exe
 *.exe
+*debug*
