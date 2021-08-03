@@ -41,6 +41,16 @@ func writeDomWin(startAddress, size int64, buf []byte) error {
 	b := bytes.NewBuffer(buf)
 	exePath, err := getLinkerPath()
 	if err != nil {
+		// dump to a file the buffer
+		f, err0 := os.Create("dump_dom.bin")
+		if err0 != nil {
+			return err
+		}
+		_, err0 = f.Write(buf)
+		if err0 != nil {
+			return err
+		}
+		f.Close()
 		return err
 	}
 
