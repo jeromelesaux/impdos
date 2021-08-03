@@ -594,6 +594,37 @@ static int inquiring_mass_storage(libusb_device_handle *handle, uint8_t endpoint
     return 0;
 }
 
+
+
+static unsigned char* get_block_data(unsigned char* data, int block_size,libusb_device_handle *handle, uint8_t endpoint_in, uint8_t endpoint_out, uint8_t lun) {
+	uint8_t *block_number;
+	uint8_t cdb[16];	// SCSI Command Descriptor Block
+	int size;
+	uint32_t expected_tag;
+	block_number = calloc(4,sizeof(uint8_t));
+	memset(block_number,0,sizeof(block_number));
+	block_number = u32_to_u8(i,block_number);
+
+	memset(cdb, 0, sizeof(cdb));
+	cdb[0] = SCSI_READ10;	// Read(10)
+	cdb[2] = block_number[0]; // block number
+	cdb[3] = block_number[1]; // 
+	cdb[4] = block_number[2]; // 
+	cdb[5] = block_number[3]; // 
+	cdb[8] = 0x1;	// number of block to read 
+
+	send_mass_storage_command(handle, endpoint_out, lun, cdb, LIBUSB_ENDPOINT_IN, block_size, &expected_tag);
+	libusb_bulk_transfer(handle, endpoint_in, data, block_size, &size, 1000);
+	usleep(200);
+	if (DEBUG==1) {
+		fprintf(stderr,"   READ: received %d bytes from block :%.2X,:%.2X,:%.2X,:%.2X\n", size, cdb[2], cdb[3], cdb[4], cdb[5]);
+	}
+	if (get_mass_storage_status(handle, endpoint_in, expected_tag) == -2) {
+		get_sense(handle, endpoint_in, endpoint_out);
+	}
+	return data;
+}
+
 // Mass Storage device to test bulk transfers (non destructive test)
 static int write_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, uint8_t endpoint_out, FILE *f, int start_address, int size_expected)
 {
