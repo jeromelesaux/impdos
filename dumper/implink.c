@@ -596,14 +596,14 @@ static int inquiring_mass_storage(libusb_device_handle *handle, uint8_t endpoint
 
 
 
-static unsigned char* get_block_data(unsigned char* data, int block_size,libusb_device_handle *handle, uint8_t endpoint_in, uint8_t endpoint_out, uint8_t lun) {
+static unsigned char* get_block_data(unsigned char* data, int block_size, uint32_t number, libusb_device_handle *handle, uint8_t endpoint_in, uint8_t endpoint_out, uint8_t lun) {
 	uint8_t *block_number;
 	uint8_t cdb[16];	// SCSI Command Descriptor Block
 	int size;
 	uint32_t expected_tag;
 	block_number = calloc(4,sizeof(uint8_t));
 	memset(block_number,0,sizeof(block_number));
-	block_number = u32_to_u8(i,block_number);
+	block_number = u32_to_u8(number,block_number);
 
 	memset(cdb, 0, sizeof(cdb));
 	cdb[0] = SCSI_READ10;	// Read(10)
@@ -637,6 +637,7 @@ static int write_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in,
 	uint8_t buffer[64];
 	char vid[9], pid[9], rev[5];
 	unsigned char *data;
+	unsigned char *data_dom;
 
 	printf("Reading Max LUN:\n");
 	r = libusb_control_transfer(handle, LIBUSB_ENDPOINT_IN|LIBUSB_REQUEST_TYPE_CLASS|LIBUSB_RECIPIENT_INTERFACE,
@@ -716,7 +717,12 @@ static int write_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in,
 		perr("   unable to allocate data buffer\n");
 		return -1;
 	}
-	
+
+	data_dom = (unsigned char*) calloc(1, block_size);
+	if (data_dom == NULL) {
+		perr("   unable to allocate data buffer\n");
+		return -1;
+	}
 	bool start_zero = true;
 	uint32_t start_offset = 0;
 	if (start_address%block_size != 0) { // commence à un multiple de block_size ?
@@ -730,11 +736,49 @@ static int write_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in,
     uint32_t start_block = (start_address / block_size);
 	uint32_t nb_iter = (size_expected / block_size)+1 + start_block;
 	uint8_t *block_number;
+	int size_copied = 0;
+
 	block_number = calloc(4,sizeof(uint8_t));
 	if (DEBUG==1) {
 		printf("   NB iterations :%d, device size:%f, block_size:%08X\n",nb_iter,device_size,block_size);
 	}
 	for (i=start_block; i < nb_iter ; i++){ 
+		memset(data_dom,0,block_size);
+		if (!start_zero) { // si pas multiple de block_size
+			if (size_expected < block_size) { // si taille demandée < block_size
+				if (fread(data, 1, (size_t)size_expected, f) != (unsigned int)size_expected) {
+					perr("   unable to write binary data\n");
+				}
+				size_copied += size_expected;
+				data_dom = get_block_data(data_dom,block_size,i,handle,endpoint_in,endpoint_out,lun);
+				memcpy(data+size_expected,data_dom+size_expected, block_size-size_expected);
+			} else { // recuperation du debut du block du dom (copy left)
+				uint32_t s = size - start_offset;
+				if (fread(data, 1, (size_t)s, f) != (unsigned int)s) {
+					perr("   unable to write binary data\n");
+				}
+				data_dom = get_block_data(data_dom,block_size,i,handle,endpoint_in,endpoint_out,lun);
+				memmove(data+s, data, s);
+				memcpy(data, data_dom, s);
+			}
+			start_zero = true;
+		} else {
+			if ((size_expected - size_copied) < block_size) { // copie la fin du block du dom (copy right)
+				uint32_t s = size_expected - size_copied;
+				if (fread(data, 1, (size_t)s, f) != (unsigned int)s) {
+					perr("   unable to write binary data\n");
+				}
+				data_dom = get_block_data(data_dom,block_size,i,handle,endpoint_in,endpoint_out,lun);
+				memcpy(data+s, data_dom+s, block_size - s);
+				size_copied += s;
+			} else {
+				if (fread(data, 1, (size_t)size, f) != (unsigned int)size) {
+					perr("   unable to write binary data\n");
+				}
+				size_copied += size;
+			}
+		}
+			fflush(f);
 		if (fread(data,1, sizeof(block_size),f) != sizeof(block_size)){
 			perr("   unable to read binary data\n");
 		} 
