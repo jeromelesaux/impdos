@@ -563,7 +563,10 @@ func isPrint(v []byte) bool {
 }
 
 func (p *Partition) DeleteInode(inodeToDelete *Inode, folder *Inode, fp *os.File) error {
-	inodeToDelete.Delete()
+	err := inodeToDelete.Delete()
+	if err != nil {
+		return err
+	}
 	offset, err := fp.Seek(0, io.SeekCurrent)
 	if err != nil {
 		return err

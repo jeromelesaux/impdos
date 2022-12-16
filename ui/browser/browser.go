@@ -130,7 +130,10 @@ func (b *Browser) extractFolder(root string, node *impdos.Inode) error {
 		if next.IsListable() {
 			if next.IsDir() {
 				newDest := filepath.Join(root, next.GetName())
-				os.Mkdir(newDest, os.ModePerm)
+				err := os.Mkdir(newDest, os.ModePerm)
+				if err != nil {
+					return err
+				}
 				if err := b.extractFolder(newDest, next); err != nil {
 					return err
 				}
@@ -312,7 +315,12 @@ func (b *Browser) Load(app fyne.App) {
 					np.Hide()
 					return
 				}
-				fr.Seek(0, io.SeekStart)
+				_, err = fr.Seek(0, io.SeekStart)
+				if err != nil {
+					dialog.ShowError(err, b.window)
+					np.Hide()
+					return
+				}
 				var copied int
 				for {
 					_, err := fr.Read(buf)
@@ -375,7 +383,12 @@ func (b *Browser) Load(app fyne.App) {
 					np.Hide()
 					return
 				}
-				fr.Seek(0, io.SeekStart)
+				_, err = fr.Seek(0, io.SeekStart)
+				if err != nil {
+					dialog.ShowError(err, b.window)
+					np.Hide()
+					return
+				}
 				var copied int
 				for {
 					_, err := fr.Read(buf)
@@ -424,7 +437,11 @@ func (b *Browser) Load(app fyne.App) {
 				}
 				root := list.Path()
 				root = filepath.Join(root, node.GetName())
-				os.Mkdir(root, os.ModePerm)
+				err = os.Mkdir(root, os.ModePerm)
+				if err != nil {
+					dialog.ShowError(err, b.window)
+					return
+				}
 
 				if err := b.extractFolder(root, node); err != nil {
 					dialog.ShowError(err, b.window)
