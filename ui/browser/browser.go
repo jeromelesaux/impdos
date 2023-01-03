@@ -15,6 +15,7 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/jeromelesaux/fyne-io/custom_widget"
 	"github.com/jeromelesaux/impdos"
 	"github.com/jeromelesaux/impdos/ui/usb"
 )
@@ -149,7 +150,6 @@ func (b *Browser) extractFolder(root string, node *impdos.Inode) error {
 }
 
 func (b *Browser) importFolder(from string, node *impdos.Inode) error {
-
 	files, err := ioutil.ReadDir(from)
 	if err != nil {
 		return err
@@ -175,7 +175,6 @@ func (b *Browser) importFolder(from string, node *impdos.Inode) error {
 }
 
 func (b *Browser) Load(app fyne.App) {
-
 	devices, err := usb.DevicesDetect()
 	if err != nil {
 		devices = []string{}
@@ -292,7 +291,8 @@ func (b *Browser) Load(app fyne.App) {
 			backupFile := writer.URI().Path()
 			os.Remove(backupFile)
 			backupFile += ".ibc"
-			np := dialog.NewProgress("backup your DOM", "Backup DOM to "+backupFile, b.window)
+			np := custom_widget.NewProgressInfinite("Backup DOM to "+backupFile, b.window)
+			//			np := dialog.NewProgress("backup your DOM", "Backup DOM to "+backupFile, b.window)
 			go func() {
 				f, err := os.Create(backupFile)
 				if err != nil {
@@ -309,7 +309,7 @@ func (b *Browser) Load(app fyne.App) {
 					return
 				}
 				defer fr.Close()
-				nb, err := fr.Seek(0, io.SeekEnd)
+				_, err = fr.Seek(0, io.SeekEnd)
 				if err != nil {
 					dialog.ShowError(err, b.window)
 					np.Hide()
@@ -335,13 +335,12 @@ func (b *Browser) Load(app fyne.App) {
 						return
 					}
 					copied += n
-					np.SetValue(float64(copied) / float64(nb))
+					// np.SetValue(float64(copied) / float64(nb))
 				}
 				np.Hide()
 				dialog.ShowInformation("Backup ended", "Your image backup is here"+backupFile, b.window)
 			}()
 			np.Show()
-
 		}, b.window)
 		fs.SetFilter(ibcFileFilter)
 		fs.Show()
@@ -360,7 +359,7 @@ func (b *Browser) Load(app fyne.App) {
 				return
 			}
 			backupFile := reader.URI().Path()
-			np := dialog.NewProgress("backup your DOM", "Backup DOM to "+backupFile, b.window)
+			np := custom_widget.NewProgressInfinite("Backup DOM to "+backupFile, b.window)
 			go func() {
 				f, err := os.Create(b.devicePath.Text)
 				if err != nil {
@@ -377,7 +376,7 @@ func (b *Browser) Load(app fyne.App) {
 					return
 				}
 				defer fr.Close()
-				nb, err := fr.Seek(0, os.SEEK_END)
+				_, err = fr.Seek(0, os.SEEK_END)
 				if err != nil {
 					dialog.ShowError(err, b.window)
 					np.Hide()
@@ -403,7 +402,7 @@ func (b *Browser) Load(app fyne.App) {
 						return
 					}
 					copied += n
-					np.SetValue(float64(copied) / float64(nb))
+					//	np.SetValue(float64(copied) / float64(nb))
 				}
 				np.Hide()
 				dialog.ShowInformation("Restoration ended", "Your device is restored with backup image : "+backupFile, b.window)
@@ -560,7 +559,6 @@ func (b *Browser) Load(app fyne.App) {
 					return
 				}
 				b.ReloadUI()
-
 			},
 			b.window)
 	})
