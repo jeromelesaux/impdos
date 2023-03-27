@@ -680,7 +680,10 @@ func (p *Partition) DeleteInode(inodeToDelete *Inode, folder *Inode, fp *os.File
 	var offset int64
 	catalogueOffset := folder.ClusterOffset()
 	off := int64(catalogueOffset)
-	inodeToDelete.Delete()
+	err := inodeToDelete.Delete()
+	if err != nil {
+		return err
+	}
 
 	if !p.DirectAccessDom {
 		var err error

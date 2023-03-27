@@ -85,7 +85,10 @@ type contextReader interface {
 
 func checkImpdosVolume(dev *gousb.Device) error {
 
-	dev.SetAutoDetach(true)
+	err := dev.SetAutoDetach(true)
+	if err != nil {
+		return err
+	}
 	intf, _, err := dev.DefaultInterface()
 	if err != nil {
 		return err

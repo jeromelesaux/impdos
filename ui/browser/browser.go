@@ -130,7 +130,9 @@ func (b *Browser) extractFolder(root string, node *impdos.Inode) error {
 		if next.IsListable() {
 			if next.IsDir() {
 				newDest := filepath.Join(root, next.GetName())
-				os.Mkdir(newDest, os.ModePerm)
+				if err := os.Mkdir(newDest, os.ModePerm); err != nil {
+					return err
+				}
 				if err := b.extractFolder(newDest, next); err != nil {
 					return err
 				}
@@ -291,7 +293,7 @@ func (b *Browser) Load(app fyne.App) {
 			backupFile := writer.URI().Path()
 			os.Remove(backupFile)
 			backupFile += ".ibc"
-			np := dialog.NewProgress("backup your DOM", "Backup DOM to "+backupFile, b.window)
+			np := dialog.NewProgress("backup your DOM", "Backup DOM to "+backupFile, b.window) // nolint:staticcheck
 			go func() {
 				f, err := os.Create(backupFile)
 				if err != nil {
@@ -314,7 +316,12 @@ func (b *Browser) Load(app fyne.App) {
 					np.Hide()
 					return
 				}
-				fr.Seek(0, io.SeekStart)
+				_, err = fr.Seek(0, io.SeekStart)
+				if err != nil {
+					dialog.ShowError(err, b.window)
+					np.Hide()
+					return
+				}
 				var copied int
 				for {
 					_, err := fr.Read(buf)
@@ -354,7 +361,7 @@ func (b *Browser) Load(app fyne.App) {
 				return
 			}
 			backupFile := reader.URI().Path()
-			np := dialog.NewProgress("backup your DOM", "Backup DOM to "+backupFile, b.window)
+			np := dialog.NewProgress("backup your DOM", "Backup DOM to "+backupFile, b.window) // nolint:staticcheck
 			go func() {
 				f, err := os.Create(b.devicePath.Text)
 				if err != nil {
@@ -371,13 +378,18 @@ func (b *Browser) Load(app fyne.App) {
 					return
 				}
 				defer fr.Close()
-				nb, err := fr.Seek(0, os.SEEK_END)
+				nb, err := fr.Seek(0, io.SeekEnd)
 				if err != nil {
 					dialog.ShowError(err, b.window)
 					np.Hide()
 					return
 				}
-				fr.Seek(0, io.SeekStart)
+				_, err = fr.Seek(0, io.SeekStart)
+				if err != nil {
+					dialog.ShowError(err, b.window)
+					np.Hide()
+					return
+				}
 				var copied int
 				for {
 					_, err := fr.Read(buf)
@@ -426,7 +438,10 @@ func (b *Browser) Load(app fyne.App) {
 				}
 				root := list.Path()
 				root = filepath.Join(root, node.GetName())
-				os.Mkdir(root, os.ModePerm)
+				if err := os.Mkdir(root, os.ModePerm); err != nil {
+					dialog.ShowError(err, b.window)
+					return
+				}
 
 				if err := b.extractFolder(root, node); err != nil {
 					dialog.ShowError(err, b.window)
@@ -559,7 +574,7 @@ func (b *Browser) Load(app fyne.App) {
 			dialog.ShowError(errors.New("can not find the folder"), b.window)
 			return
 		}
-		dialog.ShowEntryDialog("Please choose a folder name",
+		dialog.ShowEntryDialog("Please choose a folder name", // nolint:staticcheck
 			"Will create a new folder on your DOM",
 			func(ok string) {
 				pn := node.Partition.PartitionNumber

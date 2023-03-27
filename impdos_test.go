@@ -8,7 +8,7 @@ import (
 
 func TestLoad(t *testing.T) {
 	device := "/Users/jeromelesaux/Downloads/impdos_dump.img"
-	imp, err := Read(device)
+	imp, err := Read(device, true)
 	if err != nil {
 		t.Fatalf("%v\n", err)
 	}
@@ -40,7 +40,7 @@ func TestLoad(t *testing.T) {
 
 func TestLoadPartition1(t *testing.T) {
 	device := "/Users/jeromelesaux/Downloads/impdos_master_dump.img"
-	imp, err := Read(device)
+	imp, err := Read(device, true)
 	if err != nil {
 		t.Fatalf("%v\n", err)
 	}
@@ -82,7 +82,7 @@ func TestReplaceName(t *testing.T) {
 
 func TestCopyFileInDom(t *testing.T) {
 	device := "/Users/jeromelesaux/Downloads/impdos_copy_dump.img"
-	imp, err := Read(device)
+	imp, err := Read(device, true)
 	if err != nil {
 		t.Fatalf("%v\n", err)
 	}
@@ -106,7 +106,7 @@ func TestCopyFileInDom(t *testing.T) {
 
 func TestCopyFileAndCreateFolderInDom(t *testing.T) {
 	device := "/Users/jeromelesaux/Downloads/impdos_newfolder.img"
-	imp, err := Read(device)
+	imp, err := Read(device, true)
 	if err != nil {
 		t.Fatalf("%v\n", err)
 	}
