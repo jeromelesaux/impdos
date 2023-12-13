@@ -423,6 +423,18 @@ func Read(device string) (*Impdos, error) {
 		return imp, err
 	}
 	log.Printf("[IMPDOS] Nb Octets read :%d\n", nbOctets)
+
+	// check iMPdos tag
+	_, _ = imp.Pointer.Seek(0, io.SeekStart)
+	var tag [6]byte
+	err = binary.Read(imp.Pointer, binary.LittleEndian, &tag)
+	if err != nil {
+		return imp, err
+	}
+
+	if string(tag[:]) != "iMPdos" {
+		return imp, fmt.Errorf("this disk is not partitionned with IMPdos [%s]", string(tag[:]))
+	}
 	if nbOctets != int64(PartitionSize) {
 		nbPartition := nbOctets / int64(PartitionSize)
 		log.Printf("[IMPDOS] found %d partition\n", nbPartition)

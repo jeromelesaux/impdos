@@ -177,6 +177,10 @@ func (i *Inode) Read(f *os.File) error {
 	if err := binary.Read(f, binary.BigEndian, &i.Type); err != nil {
 		return err
 	}
+	if i.Type != DirectoryType && i.Type != FileType && i.Type != EndOfCatalogueType {
+		return fmt.Errorf("unknown node type [%X]", i.Type)
+	}
+
 	if err := binary.Read(f, binary.BigEndian, i.Unused); err != nil {
 		return err
 	}
