@@ -14,6 +14,7 @@ import (
 var (
 	DirectoryType   byte = 0x10
 	FileType        byte = 0
+	DosType         byte = 0x20
 	UnusedConstant0      = []byte{0x0, 0x0, 0x5d, 0x0, 0x21, 0x36, 0x0, 0x0, 0x0, 0x0, 0x5d, 0x0, 0x21, 0x36}
 )
 
@@ -177,7 +178,7 @@ func (i *Inode) Read(f *os.File) error {
 	if err := binary.Read(f, binary.BigEndian, &i.Type); err != nil {
 		return err
 	}
-	if i.Type != DirectoryType && i.Type != FileType && i.Type != EndOfCatalogueType {
+	if i.Type != DirectoryType && i.Type != FileType && i.Type != EndOfCatalogueType && i.Type != DosType {
 		return fmt.Errorf("unknown node type [%X]", i.Type)
 	}
 
