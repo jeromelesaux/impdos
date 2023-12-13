@@ -2,7 +2,7 @@ package impdos
 
 import (
 	"encoding/binary"
-	"fmt"
+	"log"
 	"testing"
 )
 
@@ -29,13 +29,13 @@ func TestLoad(t *testing.T) {
 	if err := imp.ReadRootCatalogue(0); err != nil {
 		t.Fatalf("%v\n", err)
 	}
-	fmt.Printf("%s\n", imp.Partitions[0].ListCatalogue())
+	log.Printf("%s\n", imp.Partitions[0].ListCatalogue())
 
 	maxCluster, err := imp.Partitions[0].GetNextN(imp.Pointer)
 	if err != nil {
 		t.Fatalf("%v\n", err)
 	}
-	fmt.Printf("Next cluster is %d\n", maxCluster)
+	log.Printf("Next cluster is %d\n", maxCluster)
 }
 
 func TestLoadPartition1(t *testing.T) {
@@ -61,22 +61,22 @@ func TestLoadPartition1(t *testing.T) {
 	if err := imp.ReadCatalogues(); err != nil {
 		t.Fatalf("%v\n", err)
 	}
-	fmt.Printf("%s\n", imp.Partitions[1].ListCatalogue())
-	fmt.Printf("%s\n", imp.Partitions[2].ListCatalogue())
+	log.Printf("%s\n", imp.Partitions[1].ListCatalogue())
+	log.Printf("%s\n", imp.Partitions[2].ListCatalogue())
 	maxCluster, err := imp.Partitions[0].GetNextN(imp.Pointer)
 	if err != nil {
 		t.Fatalf("%v\n", err)
 	}
-	fmt.Printf("Next cluster is %d\n", maxCluster)
+	log.Printf("Next cluster is %d\n", maxCluster)
 }
 
 // catalogue de Chany 0x2efa00 + 0x8000000
 
 func TestReplaceName(t *testing.T) {
 	v := ToImpdosName("/Users/jeromelesaux/Downloads/impdos_master_dump.BAS", false)
-	fmt.Printf("[%s]\n", v)
+	log.Printf("[%s]\n", v)
 	v = ToImpdosName("/Users/jeromelesaux/Downloads/GFX_KRIS", true)
-	fmt.Printf("[%s]\n", v)
+	log.Printf("[%s]\n", v)
 
 }
 

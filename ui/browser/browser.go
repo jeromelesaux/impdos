@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,7 +44,7 @@ func (b *Browser) updateUi() {
 	if b.imp != nil {
 		v, err := b.imp.ReadAutoExec()
 		if err != nil {
-			fmt.Printf("[UPDATE UI AUTOEXEC] cannot update ui error : %v\n", err)
+			log.Printf("[UPDATE UI AUTOEXEC] cannot update ui error : %v\n", err)
 			return
 		}
 
@@ -67,12 +68,12 @@ func (b *Browser) LoadDom(device string) {
 	var err error
 	b.imp, err = impdos.Read(device)
 	if err != nil {
-		fmt.Printf("[LOADING] error :%v\n", err)
+		log.Printf("[LOADING] error :%v\n", err)
 		dialog.ShowError(err, b.window)
 	}
 	err = b.imp.ReadCatalogues()
 	if err != nil {
-		fmt.Printf("[LOADING] error :%v\n", err)
+		log.Printf("[LOADING] error :%v\n", err)
 		dialog.ShowError(err, b.window)
 	}
 	b.devicePath.SetText(device)
@@ -103,7 +104,7 @@ func (b *Browser) LoadDom(device string) {
 			uuid = id[start+1 : end]
 			b.uuidSelected = uuid
 		}
-		fmt.Printf("Tree node selected: %s with uuid :%s\n", id, uuid)
+		log.Printf("Tree node selected: %s with uuid :%s\n", id, uuid)
 	}
 	b.treeViewGrid.Objects[0] = b.treeView
 	b.treeView.Refresh()
@@ -178,7 +179,7 @@ func (b *Browser) Load(app fyne.App) {
 	devices, err := usb.DevicesDetect()
 	if err != nil {
 		devices = []string{}
-		fmt.Printf("[UI IMPDOS] error while getting usb devices error : %v\n", err)
+		log.Printf("[UI IMPDOS] error while getting usb devices error : %v\n", err)
 	}
 	/*	tree.OnUnselected = func(id string) {
 			fmt.Printf("Tree node unselected: %s", id)
@@ -196,7 +197,7 @@ func (b *Browser) Load(app fyne.App) {
 		var err error
 		b.imp, err = impdos.Read(v)
 		if err != nil {
-			fmt.Printf("[DEVICE LOADING] cannot load device error : %v\n", err)
+			log.Printf("[DEVICE LOADING] cannot load device error : %v\n", err)
 			return
 		}
 	}
@@ -325,7 +326,7 @@ func (b *Browser) Load(app fyne.App) {
 				for {
 					_, err := fr.Read(buf)
 					if err != nil {
-						fmt.Printf("[RESTORE BACKUP] error :%v\n", err)
+						log.Printf("[RESTORE BACKUP] error :%v\n", err)
 						break
 					}
 					n, err := f.Write(buf)
@@ -392,7 +393,7 @@ func (b *Browser) Load(app fyne.App) {
 				for {
 					_, err := fr.Read(buf)
 					if err != nil {
-						fmt.Printf("[RESTORE BACKUP] error :%v\n", err)
+						log.Printf("[RESTORE BACKUP] error :%v\n", err)
 						break
 					}
 					n, err := f.Write(buf)

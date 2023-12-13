@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"strings"
 
@@ -211,7 +212,7 @@ func (i *Inode) ReadCatalogue(f *os.File) error {
 				}
 				nextCatalogueOffset := inode.ClusterOffset()
 
-				fmt.Printf("Name:%s Offset :%x next catalogue offset :%x\n",
+				log.Printf("Name:%s Offset :%x next catalogue offset :%x\n",
 					string(inode.Name),
 					offset,
 					nextCatalogueOffset)

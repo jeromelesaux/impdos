@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -65,11 +65,11 @@ func main() {
 	}*/
 	device, err := scanUsbDevices(ctx)
 	if err != nil {
-		fmt.Printf("[DUMPER] error while scanning device :%v\n", err)
+		log.Printf("[DUMPER] error while scanning device :%v\n", err)
 		os.Exit(1)
 	}
 	if err := checkImpdosVolume(device); err != nil {
-		fmt.Printf("[DUMPER] error while checking device :%v\n", err)
+		log.Printf("[DUMPER] error while checking device :%v\n", err)
 		os.Exit(1)
 	}
 	if device != nil {
@@ -97,7 +97,7 @@ func checkImpdosVolume(dev *gousb.Device) error {
 	var rdr contextReader = ep
 	s, err := ep.NewStream(1024, 512)
 	if err != nil {
-		fmt.Printf("[DUMPER CHECK] ep.NewStream(): %v÷n", err)
+		log.Printf("[DUMPER CHECK] ep.NewStream(): %v÷n", err)
 		return err
 	}
 	defer s.Close()
@@ -110,7 +110,7 @@ func checkImpdosVolume(dev *gousb.Device) error {
 	for i := 0; i < 8; i++ {
 		num, err := rdr.ReadContext(opCtx, buf)
 		if err != nil {
-			fmt.Printf("[DUMPER CHECK] Reading from device failed: %v", err)
+			log.Printf("[DUMPER CHECK] Reading from device failed: %v", err)
 			return err
 		}
 		os.Stdout.Write(buf[:num])
@@ -128,7 +128,7 @@ func scanUsbDevices(ctx *gousb.Context) (*gousb.Device, error) {
 	}
 	for _, dev := range devs {
 		if strings.Contains(usbid.Describe(dev.Desc), "JMicron Technology Corp") {
-			fmt.Printf("[DUMPER SCAN] found %s\n", usbid.Describe(dev.Desc))
+			log.Printf("[DUMPER SCAN] found %s\n", usbid.Describe(dev.Desc))
 			impdosDevice = dev
 		} else {
 			dev.Close()

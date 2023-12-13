@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 	"path"
 	"strconv"
@@ -22,9 +23,9 @@ var (
 type DomType int
 
 var (
-	Dom512Mo     = 1 // 128000000 octets * 8 == 1024000000 byte *4
-	Dom128Mo     = 2 // 128000000 octets * 8 == 1024000000 byte
-	ParitionSize = 0x7CE4800
+	Dom512Mo      = 1 // 128000000 octets * 8 == 1024000000 byte *4
+	Dom128Mo      = 2 // 128000000 octets * 8 == 1024000000 byte
+	PartitionSize = 0x7CE4800
 
 	EndOfCatalogueType byte = 0xFF
 	UpperDirectoryName      = []byte{0x2e, 0x2e, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20} // ..
@@ -421,12 +422,14 @@ func Read(device string) (*Impdos, error) {
 	if err != nil {
 		return imp, err
 	}
-	fmt.Printf("[IMPDOS] Nb Octets read :%d\n", nbOctets)
-	if nbOctets != int64(ParitionSize) {
-		nbPartition := nbOctets / int64(ParitionSize)
-		fmt.Printf("[IMPDOS] found %d partition\n", nbPartition)
+	log.Printf("[IMPDOS] Nb Octets read :%d\n", nbOctets)
+	if nbOctets != int64(PartitionSize) {
+		nbPartition := nbOctets / int64(PartitionSize)
+		log.Printf("[IMPDOS] found %d partition\n", nbPartition)
 		if nbPartition == 0 {
-			return imp, errors.New("no ImpDOS partition found")
+			//return imp, errors.New("no ImpDOS partition found")
+			// try with one partition
+			nbPartition = 1
 		}
 		for i := 0; i < int(nbPartition); i++ {
 			imp.Partitions = append(imp.Partitions, NewPartition(i))
@@ -682,7 +685,7 @@ func (p *Partition) NewFolder(folderName string, fp *os.File, folder *Inode) (*I
 
 		originalTrash = NewInode(folder.PartitionOffset, folder, folder.Partition)
 		originalTrash.Cluster = 2
-		fmt.Printf("[IMPDOS] folder does not contain any trash folder, choose the cluster to 2.")
+		log.Printf("[IMPDOS] folder does not contain any trash folder, choose the cluster to 2.")
 	}
 	trashInode := InitInode(p.PartitionOffset(), newInode, p, originalTrash.Cluster, 0, DirectoryType, trashName)
 
