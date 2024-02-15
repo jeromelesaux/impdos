@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
+
 	"log"
 	"os"
 	"path"
@@ -237,7 +237,7 @@ func (imp *Impdos) SaveAutoexec(a *AutoExec) error {
 	if err := binary.Write(imp.Pointer, binary.LittleEndian, a); err != nil {
 		return err
 	}
-	_, err = imp.Pointer.Seek(int64(offset), io.SeekStart) // return to initial offset
+	_, err = imp.Pointer.Seek(offset, io.SeekStart) // return to initial offset
 	if err != nil {
 		return err
 	}
@@ -303,7 +303,7 @@ func (p *Partition) SaveInodeEntry(fp *os.File, folder *Inode, entry *Inode) err
 	if err := entry.Save(fp); err != nil {
 		return err
 	}
-	_, err = fp.Seek(int64(offset), io.SeekStart) // return to initial offset
+	_, err = fp.Seek(offset, io.SeekStart) // return to initial offset
 	if err != nil {
 		return err
 	}
@@ -340,7 +340,7 @@ func (p *Partition) SaveInode(fp *os.File, folder *Inode, newInode *Inode) error
 	if err := newInode.Save(fp); err != nil {
 		return err
 	}
-	_, err = fp.Seek(int64(offset), io.SeekStart) // return to initial offset
+	_, err = fp.Seek(offset, io.SeekStart) // return to initial offset
 	if err != nil {
 		return err
 	}
@@ -522,7 +522,7 @@ func (i *Inode) Get(f *os.File) ([]byte, error) {
 		return b, errors.New("read bytes differs from size inode")
 	}
 
-	_, err = f.Seek(int64(offset), io.SeekStart) // return to initial offset
+	_, err = f.Seek(offset, io.SeekStart) // return to initial offset
 	if err != nil {
 		return b, err
 	}
@@ -558,7 +558,7 @@ func (i *Inode) Put(f *os.File, data []byte) error {
 		return errors.New("read bytes differs from size inode")
 	}
 
-	_, err = f.Seek(int64(offset), io.SeekStart) // return to initial offset
+	_, err = f.Seek(offset, io.SeekStart) // return to initial offset
 	if err != nil {
 		return err
 	}
@@ -614,7 +614,7 @@ func (p *Partition) DeleteInode(inodeToDelete *Inode, folder *Inode, fp *os.File
 		return err
 	}
 
-	_, err = fp.Seek(int64(offset), io.SeekStart) // return to initial offset
+	_, err = fp.Seek(offset, io.SeekStart) // return to initial offset
 	if err != nil {
 		return err
 	}
@@ -648,6 +648,7 @@ func (p *Partition) FormatCatalogue(fp *os.File, folder *Inode) error {
 	return nil
 }
 
+// nolint: funlen
 func (p *Partition) NewFolder(folderName string, fp *os.File, folder *Inode) (*Inode, error) {
 	// transform file name
 	impdosName := ToImpdosName(folderName, true)
@@ -741,7 +742,7 @@ func (p *Partition) Save(filename string, fp *os.File, folder *Inode) error {
 	if err != nil {
 		return err
 	}
-	b, err := ioutil.ReadAll(f)
+	b, err := io.ReadAll(f)
 	if err != nil {
 		return err
 	}

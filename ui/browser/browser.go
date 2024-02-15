@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
+
 	"log"
 	"os"
 	"path/filepath"
@@ -151,7 +151,7 @@ func (b *Browser) extractFolder(root string, node *impdos.Inode) error {
 }
 
 func (b *Browser) importFolder(from string, node *impdos.Inode) error {
-	files, err := ioutil.ReadDir(from)
+	files, err := os.ReadDir(from)
 	if err != nil {
 		return err
 	}
@@ -175,6 +175,7 @@ func (b *Browser) importFolder(from string, node *impdos.Inode) error {
 	return nil
 }
 
+// nolint: funlen, gocognit
 func (b *Browser) Load(app fyne.App) {
 	devices, err := usb.DevicesDetect()
 	if err != nil {
@@ -377,7 +378,7 @@ func (b *Browser) Load(app fyne.App) {
 					return
 				}
 				defer fr.Close()
-				_, err = fr.Seek(0, os.SEEK_END)
+				_, err = fr.Seek(0, io.SeekEnd)
 				if err != nil {
 					dialog.ShowError(err, b.window)
 					np.Hide()
@@ -573,6 +574,8 @@ func (b *Browser) Load(app fyne.App) {
 			dialog.ShowError(errors.New("can not find the folder"), b.window)
 			return
 		}
+
+		// nolint: staticcheck
 		dialog.ShowEntryDialog("Please choose a folder name",
 			"Will create a new folder on your DOM",
 			func(ok string) {

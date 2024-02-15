@@ -228,7 +228,7 @@ func (i *Inode) ReadCatalogue(f *os.File) error {
 				if err = inode.ReadCatalogue(f); err != nil {
 					return err
 				}
-				_, err = f.Seek(int64(offset), io.SeekStart) // return to initial offset
+				_, err = f.Seek(offset, io.SeekStart) // return to initial offset
 				if err != nil {
 					return err
 				}
